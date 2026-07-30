@@ -86,6 +86,12 @@ targets:
       - path: LenguaTests
     dependencies:
       - target: Lengua
+      - package: Dependencies
+        product: Dependencies
+        link: false
+      - package: Sharing
+        product: Sharing
+        link: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lengua-app.lengua.LenguaTests
