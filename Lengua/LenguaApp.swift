@@ -1,4 +1,5 @@
 import Dependencies
+import GoogleSignIn
 import SwiftUI
 import UIKit
 
@@ -30,6 +31,12 @@ struct LenguaApp: App {
         EmptyView()
       } else {
         ContentView()
+          .onOpenURL { url in
+            GIDSignIn.sharedInstance.handle(url)
+          }
+          .onAppear {
+            GIDSignIn.sharedInstance.restorePreviousSignIn { _, _ in }
+          }
       }
     }
   }

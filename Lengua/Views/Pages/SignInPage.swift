@@ -87,17 +87,91 @@ final class SignInPageModel: ViewModel {
 }
 
 struct SignInPage: View {
-  @State var model: SignInPageModel
+  @Bindable var model: SignInPageModel
 
   var body: some View {
-    VStack(spacing: 24) {
-      Text(model.titleText).font(.largeTitle).bold()
-      Text(model.subtitleText).foregroundStyle(.secondary)
-      Button(model.googleSignInButtonTitle) {
-        Task { await model.signInWithGoogleButtonTapped() }
+    ZStack {
+      Color(red: 0.24, green: 0.29, blue: 0.85)
+        .ignoresSafeArea()
+
+      VStack(spacing: 24) {
+        Spacer()
+
+        Image("LogoMark")
+          .resizable()
+          .scaledToFit()
+          .frame(height: 96)
+
+        Text(model.titleText)
+          .font(.system(size: 56, weight: .bold))
+          .foregroundStyle(.white)
+
+        Text(model.subtitleText)
+          .font(.title3)
+          .foregroundStyle(.white.opacity(0.75))
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, 48)
+
+        Spacer()
+
+        VStack(spacing: 16) {
+          WhiteSignInButton(
+            iconImageName: "google-icon",
+            systemIcon: nil,
+            title: model.googleSignInButtonTitle
+          ) {
+            Task { await model.signInWithGoogleButtonTapped() }
+          }
+
+          WhiteSignInButton(
+            iconImageName: nil,
+            systemIcon: "apple.logo",
+            title: model.appleSignInButtonTitle
+          ) {
+            model.appleSignInButtonTapped()
+          }
+          .disabled(!model.isAppleSignInEnabled)
+          .opacity(model.isAppleSignInEnabled ? 1 : 0.5)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
       }
-      .buttonStyle(.borderedProminent)
     }
-    .padding()
+    .lenguaAlert($model.presentedAlert)
   }
+}
+
+private struct WhiteSignInButton: View {
+  let iconImageName: String?
+  let systemIcon: String?
+  let title: String
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 12) {
+        if let iconImageName {
+          Image(iconImageName)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 24, height: 24)
+        } else if let systemIcon {
+          Image(systemName: systemIcon)
+            .font(.system(size: 22))
+            .foregroundStyle(.black)
+        }
+        Text(title)
+          .font(.system(size: 20, weight: .semibold))
+          .foregroundStyle(.black)
+      }
+      .frame(maxWidth: .infinity)
+      .frame(height: 56)
+      .background(Color.white)
+      .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+  }
+}
+
+#Preview {
+  SignInPage(model: SignInPageModel())
 }
