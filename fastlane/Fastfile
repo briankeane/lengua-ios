@@ -1,0 +1,31 @@
+default_platform(:ios)
+
+REQUIRED_ENV = %w[MATCH_PASSWORD APP_STORE_CONNECT_API_KEY_ID].freeze
+
+def ensure_release_secrets!
+  missing = REQUIRED_ENV.reject { |k| ENV[k] && !ENV[k].empty? }
+  unless missing.empty?
+    UI.user_error!("Release secrets not configured: #{missing.join(', ')}. " \
+                   "This is a scaffold — fill in Appfile/Matchfile and CI secrets first.")
+  end
+end
+
+platform :ios do
+  desc "Build and upload production to TestFlight"
+  lane :release_production do
+    ensure_release_secrets!
+    setup_ci if ENV["CI"]
+    match(type: "appstore", readonly: true)
+    build_app(scheme: "Lengua", xcargs: "-skipMacroValidation")
+    upload_to_testflight(skip_waiting_for_build_processing: true)
+  end
+
+  desc "Build and upload staging to TestFlight"
+  lane :release_staging do
+    ensure_release_secrets!
+    setup_ci if ENV["CI"]
+    match(type: "appstore", readonly: true)
+    build_app(scheme: "Lengua", configuration: "Staging", xcargs: "-skipMacroValidation")
+    upload_to_testflight(skip_waiting_for_build_processing: true)
+  end
+end
