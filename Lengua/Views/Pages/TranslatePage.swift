@@ -28,18 +28,20 @@ struct TranslatePage: View {
   private let spanishCardColor = Color(red: 0.87, green: 0.89, blue: 0.98)
 
   var body: some View {
-    ZStack {
-      pageBlue.ignoresSafeArea()
-
-      VStack(spacing: 0) {
-        englishCard
-        swapButton
-          .padding(.vertical, -20)
-          .zIndex(1)
-        spanishCard
+    GeometryReader { proxy in
+      ScrollView {
+        VStack(spacing: 0) {
+          englishCard
+          swapButton
+            .padding(.vertical, -20)
+            .zIndex(1)
+          spanishCard
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: proxy.size.height)
       }
-      .padding(.horizontal, 16)
     }
+    .background(pageBlue.ignoresSafeArea())
   }
 
   private var englishCard: some View {
