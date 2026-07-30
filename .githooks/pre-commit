@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+# Format and lint only the Swift files staged for THIS commit, so unrelated
+# tracked edits in the working tree are never swept in by a broad `git add -u`.
+staged_swift=$(git diff --cached --name-only --diff-filter=ACM -- '*.swift')
+[ -z "$staged_swift" ] && exit 0
+
+echo "$staged_swift" | tr '\n' '\0' | xargs -0 xcrun swift-format format -i
+swiftlint --strict --quiet
+echo "$staged_swift" | tr '\n' '\0' | xargs -0 git add

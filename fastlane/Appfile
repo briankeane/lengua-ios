@@ -1,0 +1,5 @@
+# PLACEHOLDER — fill in when the App Store Connect app exists.
+app_identifier "com.lengua-app.lengua"
+apple_id "PLACEHOLDER_APPLE_ID"      # e.g. "you@example.com"
+itc_team_id "PLACEHOLDER_ITC_TEAM"   # App Store Connect team id
+team_id "PLACEHOLDER_TEAM_ID"        # Developer Portal team id

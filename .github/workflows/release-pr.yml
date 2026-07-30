@@ -1,0 +1,27 @@
+name: Release PR
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Open develop -> main release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing=$(gh pr list --base main --head develop --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Release PR already exists (#$existing)."
+          else
+            gh pr create --base main --head develop \
+              --title "Release" \
+              --body "Automated release PR from develop to main."
+          fi

@@ -1,0 +1,22 @@
+# Xcode
+*.xcodeproj
+!project.yml
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+
+# SPM
+.build/
+
+# Secrets (only real, non-placeholder secrets go here later)
+# Placeholder Secrets*.xcconfig ARE committed for now.
+
+# Ruby / fastlane
+vendor/bundle/
+fastlane/report.xml
+fastlane/test_output/
+
+# Conductor scratch
+.context/

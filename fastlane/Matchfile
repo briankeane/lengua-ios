@@ -1,0 +1,5 @@
+# PLACEHOLDER — fill in when the match certs repo exists.
+git_url("PLACEHOLDER_MATCH_GIT_URL")
+storage_mode("git")
+type("appstore")
+app_identifier(["com.lengua-app.lengua", "com.lengua-app.lengua.staging"])
