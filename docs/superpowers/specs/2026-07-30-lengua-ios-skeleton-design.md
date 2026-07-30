@@ -33,9 +33,11 @@ pattern with **one** real page (Home) end-to-end.
 - Targets:
   - `Lengua` — iOS app. Bundle IDs `com.lengua-app.lengua` (Release/Debug) and
     `com.lengua-app.lengua.staging` (Staging config). Display name **Lengua**.
-  - `LenguaTests` — **logic-only** unit test bundle (NO `TEST_HOST`/`BUNDLE_LOADER`;
-    the `@Shared`/`@Dependency` tests don't need app hosting). Bundle ID
-    `com.lengua-app.lengua.LenguaTests`.
+  - `LenguaTests` — **app-hosted** unit test bundle. XcodeGen auto-wires
+    `TEST_HOST`/`BUNDLE_LOADER`/`TEST_TARGET_NAME` from the test target's
+    dependency on the `Lengua` app target, which is what lets tests
+    `@testable import Lengua`. The app renders `EmptyView` under XCTest so
+    hosting doesn't run the real UI. Bundle ID `com.lengua-app.lengua.LenguaTests`.
 - Deployment target **iOS 18.0**. `SWIFT_VERSION = 5.0` (matches the proven
   reference; `@Observable` + Point-Free libs build under Swift 5 language mode).
 - Build configurations: **Debug**, **Release**, **Staging**. Each maps to an
@@ -191,7 +193,7 @@ required for TestFlight upload).
 
 Each stage ends compiling + committable.
 
-1. **Skeleton project builds empty.** `project.yml` → app target + logic test
+1. **Skeleton project builds empty.** `project.yml` → app target + app-hosted test
    target + Point-Free packages resolved; minimal `LenguaApp` (plain SwiftUI
    `Text`), one trivial passing test. `xcodebuild build`/`test` green.
 2. **Core architecture.** `ViewModel`, `LenguaAlert`, `Config` + committed
