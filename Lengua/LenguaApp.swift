@@ -7,7 +7,7 @@ struct LenguaApp: App {
       if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
         EmptyView()
       } else {
-        Text("Lengua")
+        ContentView()
       }
     }
   }
