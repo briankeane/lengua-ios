@@ -106,8 +106,11 @@ None required — this is inert UI. No API, no failable operations, no alerts.
 App-hosted `XCTest`, `@MainActor`, colocated in `LenguaTests/`, camelCase names.
 Use `pfw-custom-dump` (`expectNoDifference`) for value comparisons where it fits.
 
-- `MainContainerModelTests`: default active tab is `.lookUp`; each of the five tab
-  titles and icon names is correct.
+- `MainContainerModelTests`: `ActiveTab` has exactly the five expected cases; each
+  of the five tab titles and icon names is correct. (The "lands on Look up after
+  sign-in" default is process-global in-memory state — asserting it in a unit test
+  is order-dependent/flaky, so it is verified by running the app rather than a unit
+  test.)
 - `TranslatePageModelTests`: asserts the display strings (labels, placeholders,
   hint).
 - `DeckPageModelTests`, `ReviewPageModelTests`, `TalkPageModelTests`,
