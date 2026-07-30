@@ -1,3 +1,4 @@
+import Dependencies
 import Sharing
 import SwiftUI
 
@@ -6,6 +7,9 @@ import SwiftUI
 final class HomePageModel: ViewModel {
   // MARK: - Shared State
   @ObservationIgnored @Shared(.auth) var auth
+
+  // MARK: - Dependencies
+  @ObservationIgnored @Dependency(\.api) var api
 
   // MARK: - Properties
   var presentedAlert: LenguaAlert?
