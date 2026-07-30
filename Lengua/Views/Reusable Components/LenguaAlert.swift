@@ -35,3 +35,23 @@ extension View {
     )
   }
 }
+
+extension LenguaAlert {
+  static var signInError: LenguaAlert {
+    LenguaAlert(
+      title: "Sign-In Failed",
+      message:
+        "Something went wrong on our end while signing you in. Please try again. "
+        + "If it keeps happening, contact us at lonesomewhistle@gmail.com and we'll "
+        + "help get you sorted.")
+  }
+
+  static var signInNetworkError: LenguaAlert {
+    LenguaAlert(
+      title: "Connection Issue",
+      message:
+        "Your network is blocking the secure connection to Lengua. Try turning "
+        + "off wifi and using cellular data, or switch to a different wifi "
+        + "network. (More info: https://support.apple.com/en-us/122756)")
+  }
+}
