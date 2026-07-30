@@ -41,18 +41,23 @@ path before guessing at endpoint shapes or request/response payloads.
   for bug fixes.
 - **Tests are app-hosted** — the `LenguaTests` target runs inside the
   `Lengua` app host, via `xcodebuild test` (`make test`).
-- **Test naming**: camelCase without underscores (e.g.
-  `testGreetingUsesFirstNameWhenLoggedIn`).
-- **Tests colocated with code**: `HomePage.swift` → `HomePageTests.swift` in
-  the same folder.
-- **Framework**: XCTest, `@MainActor` on all test classes.
+- **Framework**: always **swift-testing** (`import Testing`, `@Suite` /
+  `@Test`, `#expect` / `#require`) — never XCTest. Convert any XCTest file you
+  touch. Use `expectNoDifference` / `expectDifference` from CustomDump for value
+  comparisons (see the `pfw-custom-dump` skill), not raw `#expect(a == b)`.
+- **Test naming**: `@Test` methods are camelCase without underscores and drop
+  the `test` prefix (e.g. `greetingUsesFirstNameWhenLoggedIn`).
+- **Suites are structs** annotated `@MainActor`. Mark suites that touch
+  process-global `@Shared` state `.serialized` to avoid parallel-execution
+  races.
+- **Tests colocated with code**: `HomePage.swift` → `HomePageTests.swift`.
 
 ### Testing with @Shared state
 
 Declare `@Shared` locally inside each test method with an initial value:
 
 ```swift
-func testSomething() {
+@Test func something() {
   @Shared(.auth) var auth = Auth()
   @Shared(.activeTab) var activeTab = .home
 

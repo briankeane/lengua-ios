@@ -1,9 +1,9 @@
-import XCTest
+import Testing
 
 @testable import Lengua
 
-final class SmokeTests: XCTestCase {
-  func testAppModuleLoads() {
-    XCTAssertTrue(true)
+struct SmokeTests {
+  @Test func appModuleLoads() {
+    #expect(Bool(true))
   }
 }

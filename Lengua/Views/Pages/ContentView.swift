@@ -15,5 +15,6 @@ struct ContentView: View {
         SignInPage(model: SignInPageModel())
       }
     }
+    .translatorHost()
   }
 }
