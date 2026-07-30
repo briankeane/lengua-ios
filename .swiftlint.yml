@@ -1,0 +1,23 @@
+disabled_rules:
+  - trailing_whitespace
+  - trailing_comma
+  - todo
+
+line_length:
+  warning: 120
+  error: 200
+
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  allowed_symbols:
+    - "_"
+
+file_length:
+  warning: 1000
+  error: 1000
+
+excluded:
+  - .build
+  - Lengua.xcodeproj

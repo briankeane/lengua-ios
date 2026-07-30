@@ -13,7 +13,8 @@ final class HomePageTests: XCTestCase {
   func testGreetingUsesFirstNameWhenLoggedIn() {
     @Shared(.auth) var auth = Auth(
       jwtToken: "token",
-      currentUser: User(id: "1", email: "a@b.com", firstName: "Sam", lastName: nil, profileImageUrl: nil)
+      currentUser: User(
+        id: "1", email: "a@b.com", firstName: "Sam", lastName: nil, profileImageUrl: nil)
     )
     let model = HomePageModel()
     XCTAssertEqual(model.greeting, "Hola, Sam!")

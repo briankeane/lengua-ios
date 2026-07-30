@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+xcrun swift-format format -i --recursive Lengua LenguaTests
+swiftlint --strict --quiet
+git add -u
