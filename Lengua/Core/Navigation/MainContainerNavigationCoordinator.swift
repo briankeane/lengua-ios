@@ -9,9 +9,7 @@ final class MainContainerNavigationCoordinator {
 
   var path: [Path] = []
 
-  init(path: [Path] = []) {
-    self.path = path
-  }
+  nonisolated init() {}
 
   func push(_ item: Path) { path.append(item) }
   func pop() { _ = path.popLast() }

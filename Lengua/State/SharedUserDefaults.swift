@@ -15,10 +15,7 @@ extension SharedKey where Self == InMemoryKey<MainContainerModel.ActiveTab>.Defa
 
 extension SharedKey where Self == InMemoryKey<MainContainerNavigationCoordinator>.Default {
   static var mainContainerNavigationCoordinator: Self {
-    Self[
-      .inMemory("mainContainerNavigationCoordinator"),
-      default: MainActor.assumeIsolated { MainContainerNavigationCoordinator() }
-    ]
+    Self[.inMemory("mainContainerNavigationCoordinator"), default: MainContainerNavigationCoordinator()]
   }
 }
 
