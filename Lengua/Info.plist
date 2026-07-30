@@ -27,11 +27,13 @@
 			<string></string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.458159274501-45e0d61m9v4710girp004e1io6bdatdv</string>
+				<string>com.googleusercontent.apps.458159274501-5s2dkcsiuupf0reus35c60976lrrvgg0</string>
 			</array>
 		</dict>
 	</array>
 	<key>GIDClientID</key>
+	<string>458159274501-5s2dkcsiuupf0reus35c60976lrrvgg0.apps.googleusercontent.com</string>
+	<key>GIDServerClientID</key>
 	<string>458159274501-45e0d61m9v4710girp004e1io6bdatdv.apps.googleusercontent.com</string>
 	<key>DEV_ENVIRONMENT</key>
 	<string>$(DEV_ENVIRONMENT)</string>
