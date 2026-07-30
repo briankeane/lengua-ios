@@ -34,19 +34,44 @@ struct TranslationProviderTests {
     #expect(availability == .unknown)
   }
 
-  @Test func brokerReturnsEmptyForBlankInputWithoutSession() async throws {
-    let result = try await AppleTranslationBroker.shared.translate(
-      "   \n ", from: english, to: spanish)
+  @Test func brokerReturnsEmptyForBlankInputWithoutHost() async throws {
+    // Blank input short-circuits before any host/session is required.
+    let broker = AppleTranslationBroker()
+    let result = try await broker.translate("   \n ", from: english, to: spanish)
     #expect(result == "")
   }
 
-  // No session host is mounted in tests, so a non-blank request stays queued
-  // forever unless the caller cancels — which verifies the broker's
-  // cancellation path unblocks a waiter instead of leaking it (and that the
-  // "host never mounted" case does not hang uncancelled callers indefinitely).
-  @Test func brokerCancellationUnblocksWaiter() async {
+  @Test func brokerThrowsNotReadyWhenNoHostMounted() async {
+    // A non-blank request with no mounted host fails fast instead of suspending
+    // forever (Greptile P1). Caller cancellation is only a backstop.
+    let broker = AppleTranslationBroker()
+    await #expect(throws: TranslatorError.notReady) {
+      try await broker.translate("Hello", from: english, to: spanish)
+    }
+  }
+
+  @Test func brokerFailsPendingWithNotReadyWhenLastHostUnmounts() async {
+    // A request that is waiting on a session is released with `.notReady` when
+    // the last host disappears, rather than hanging.
+    let broker = AppleTranslationBroker()
+    broker.hostDidMount()
     let task = Task { @MainActor in
-      try await AppleTranslationBroker.shared.translate("Hello", from: english, to: spanish)
+      try await broker.translate("Hello", from: english, to: spanish)
+    }
+    await Task.yield()
+    broker.hostDidUnmount()
+    await #expect(throws: TranslatorError.notReady) {
+      try await task.value
+    }
+  }
+
+  @Test func brokerCancellationUnblocksWaiter() async {
+    // With a host mounted the request suspends waiting for a session; cancelling
+    // the caller unblocks it with CancellationError rather than leaking it.
+    let broker = AppleTranslationBroker()
+    broker.hostDidMount()
+    let task = Task { @MainActor in
+      try await broker.translate("Hello", from: english, to: spanish)
     }
     task.cancel()
     await #expect(throws: CancellationError.self) {

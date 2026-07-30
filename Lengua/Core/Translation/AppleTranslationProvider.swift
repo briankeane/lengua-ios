@@ -66,6 +66,9 @@ final class AppleTranslationBroker {
   /// Ids awaiting a session, in FIFO order.
   @ObservationIgnored private var queue: [UUID] = []
   @ObservationIgnored private var isDraining = false
+  /// Number of mounted hosts able to vend a session. When zero, no session can
+  /// ever arrive, so a request must fail fast instead of suspending forever.
+  @ObservationIgnored private var mountedHostCount = 0
 
   private struct PendingRequest {
     let id: UUID
@@ -73,11 +76,29 @@ final class AppleTranslationBroker {
     let continuation: CheckedContinuation<String, Error>
   }
 
+  /// Called by a host when it appears. Only while at least one host is mounted
+  /// can `translate` obtain a session.
+  func hostDidMount() { mountedHostCount += 1 }
+
+  /// Called by a host when it disappears. If the last host goes away, no session
+  /// can arrive, so any still-waiting requests fail with `.notReady` rather than
+  /// hanging.
+  func hostDidUnmount() {
+    mountedHostCount = max(0, mountedHostCount - 1)
+    if mountedHostCount == 0 {
+      failAll(with: TranslatorError.notReady)
+    }
+  }
+
   func translate(
     _ text: String, from source: Locale.Language, to target: Locale.Language
   ) async throws -> String {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return "" }
+    // No mounted host means no session can ever be vended (e.g. the host was
+    // never mounted, or we are in a context — like the Simulator — where the
+    // Translation UI is absent). Fail fast rather than suspending indefinitely.
+    guard mountedHostCount > 0 else { throw TranslatorError.notReady }
 
     let id = UUID()
     return try await withTaskCancellationHandler {
@@ -163,6 +184,8 @@ struct AppleTranslationHost: View {
       .translationTask(broker.configuration) { session in
         await broker.drainQueue(using: session)
       }
+      .onAppear { broker.hostDidMount() }
+      .onDisappear { broker.hostDidUnmount() }
   }
 }
 
