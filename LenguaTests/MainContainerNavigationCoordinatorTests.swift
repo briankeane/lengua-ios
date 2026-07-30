@@ -1,27 +1,28 @@
-import XCTest
+import CustomDump
+import Testing
 
 @testable import Lengua
 
 @MainActor
-final class MainContainerNavigationCoordinatorTests: XCTestCase {
-  func testPushAppendsToPath() {
+struct MainContainerNavigationCoordinatorTests {
+  @Test func pushAppendsToPath() {
     let coordinator = MainContainerNavigationCoordinator()
     coordinator.push(.profile)
-    XCTAssertEqual(coordinator.path, [.profile])
+    expectNoDifference(coordinator.path, [.profile])
   }
 
-  func testPopRemovesLast() {
+  @Test func popRemovesLast() {
     let coordinator = MainContainerNavigationCoordinator()
     coordinator.push(.profile)
     coordinator.pop()
-    XCTAssertEqual(coordinator.path, [])
+    expectNoDifference(coordinator.path, [])
   }
 
-  func testPopToRootClearsPath() {
+  @Test func popToRootClearsPath() {
     let coordinator = MainContainerNavigationCoordinator()
     coordinator.push(.profile)
     coordinator.push(.profile)
     coordinator.popToRoot()
-    XCTAssertEqual(coordinator.path, [])
+    expectNoDifference(coordinator.path, [])
   }
 }
