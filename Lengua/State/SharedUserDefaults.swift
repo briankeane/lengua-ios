@@ -9,7 +9,7 @@ extension SharedKey where Self == FileStorageKey<Auth>.Default {
 
 extension SharedKey where Self == InMemoryKey<MainContainerModel.ActiveTab>.Default {
   static var activeTab: Self {
-    Self[.inMemory("activeTab"), default: .home]
+    Self[.inMemory("activeTab"), default: .lookUp]
   }
 }
 

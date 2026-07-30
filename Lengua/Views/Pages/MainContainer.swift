@@ -5,15 +5,23 @@ import SwiftUI
 @Observable
 final class MainContainerModel: ViewModel {
   enum ActiveTab: String, Codable, Sendable, CaseIterable {
-    case home
-    case profile
+    case lookUp
+    case deck
+    case review
+    case talk
+    case you
   }
 
-  var homeTabTitle: String { "Home" }
-  var homeTabIconName: String { "house" }
-  var profileTabTitle: String { "Profile" }
-  var profileTabIconName: String { "person" }
-  var profilePlaceholderText: String { "Profile" }
+  var lookUpTabTitle: String { "Look up" }
+  var lookUpTabIconName: String { "magnifyingglass" }
+  var deckTabTitle: String { "Deck" }
+  var deckTabIconName: String { "rectangle.stack" }
+  var reviewTabTitle: String { "Review" }
+  var reviewTabIconName: String { "checkmark.square" }
+  var talkTabTitle: String { "Talk" }
+  var talkTabIconName: String { "waveform" }
+  var youTabTitle: String { "You" }
+  var youTabIconName: String { "person" }
 
   override init() { super.init() }
 }
@@ -21,21 +29,38 @@ final class MainContainerModel: ViewModel {
 struct MainContainer: View {
   @State var model: MainContainerModel
   @Shared(.activeTab) var activeTab
-  @Shared(.mainContainerNavigationCoordinator) var coordinator
 
   var body: some View {
     TabView(selection: Binding($activeTab)) {
-      NavigationStack(path: Binding(get: { coordinator.path }, set: { coordinator.path = $0 })) {
-        HomePage(model: HomePageModel())
+      NavigationStack {
+        TranslatePage(model: TranslatePageModel())
       }
-      .tabItem { Label(model.homeTabTitle, systemImage: model.homeTabIconName) }
-      .tag(MainContainerModel.ActiveTab.home)
+      .tabItem { Label(model.lookUpTabTitle, systemImage: model.lookUpTabIconName) }
+      .tag(MainContainerModel.ActiveTab.lookUp)
 
       NavigationStack {
-        Text(model.profilePlaceholderText).navigationTitle(model.profileTabTitle)
+        DeckPage(model: DeckPageModel())
       }
-      .tabItem { Label(model.profileTabTitle, systemImage: model.profileTabIconName) }
-      .tag(MainContainerModel.ActiveTab.profile)
+      .tabItem { Label(model.deckTabTitle, systemImage: model.deckTabIconName) }
+      .tag(MainContainerModel.ActiveTab.deck)
+
+      NavigationStack {
+        ReviewPage(model: ReviewPageModel())
+      }
+      .tabItem { Label(model.reviewTabTitle, systemImage: model.reviewTabIconName) }
+      .tag(MainContainerModel.ActiveTab.review)
+
+      NavigationStack {
+        TalkPage(model: TalkPageModel())
+      }
+      .tabItem { Label(model.talkTabTitle, systemImage: model.talkTabIconName) }
+      .tag(MainContainerModel.ActiveTab.talk)
+
+      NavigationStack {
+        YouPage(model: YouPageModel())
+      }
+      .tabItem { Label(model.youTabTitle, systemImage: model.youTabIconName) }
+      .tag(MainContainerModel.ActiveTab.you)
     }
   }
 }
