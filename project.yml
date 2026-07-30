@@ -39,6 +39,12 @@ packages:
   Sentry:
     url: https://github.com/getsentry/sentry-cocoa
     from: "8.44.0"
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "8.0.0"
+  ConcurrencyExtras:
+    url: https://github.com/pointfreeco/swift-concurrency-extras
+    from: "1.1.0"
 
 targets:
   Lengua:
@@ -78,6 +84,10 @@ targets:
         product: Alamofire
       - package: Sentry
         product: Sentry
+      - package: GoogleSignIn
+        product: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
 
   LenguaTests:
     type: bundle.unit-test
@@ -91,6 +101,12 @@ targets:
         link: false
       - package: Sharing
         product: Sharing
+        link: false
+      - package: CustomDump
+        product: CustomDump
+        link: false
+      - package: ConcurrencyExtras
+        product: ConcurrencyExtras
         link: false
     settings:
       base:

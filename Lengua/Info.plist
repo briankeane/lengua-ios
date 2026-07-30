@@ -18,6 +18,21 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string></string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.458159274501-45e0d61m9v4710girp004e1io6bdatdv</string>
+			</array>
+		</dict>
+	</array>
+	<key>GIDClientID</key>
+	<string>458159274501-45e0d61m9v4710girp004e1io6bdatdv.apps.googleusercontent.com</string>
 	<key>DEV_ENVIRONMENT</key>
 	<string>$(DEV_ENVIRONMENT)</string>
 	<key>SENTRY_DSN</key>
