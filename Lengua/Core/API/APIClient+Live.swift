@@ -19,6 +19,41 @@ extension APIClient: DependencyKey {
         let url = baseUrl.appendingPathComponent("health")
         let response = await session.request(url).serializingData().response
         return response.response?.statusCode == 200
+      },
+      signInViaGoogle: { idToken in
+        let path = "v1/auth/google"
+        let url = baseUrl.appendingPathComponent(path)
+        let response = await session.request(
+          url,
+          method: .post,
+          parameters: ["idToken": idToken],
+          encoding: JSONEncoding.default
+        ).serializingData().response
+
+        guard let httpResponse = response.response else {
+          throw SignInAPIError(
+            authMethod: .google, endpointPath: "/\(path)", statusCode: nil,
+            responseBody: nil, underlyingError: response.error ?? APIError.dataNotValid)
+        }
+
+        let body = response.data.flatMap { String(data: $0, encoding: .utf8) }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+          throw SignInAPIError(
+            authMethod: .google, endpointPath: "/\(path)",
+            statusCode: httpResponse.statusCode, responseBody: body,
+            underlyingError: response.error ?? APIError.dataNotValid)
+        }
+
+        guard let data = response.data,
+          let decoded = try? JSONDecoder().decode(GoogleSignInResponse.self, from: data)
+        else {
+          throw SignInAPIError(
+            authMethod: .google, endpointPath: "/\(path)",
+            statusCode: httpResponse.statusCode, responseBody: body,
+            underlyingError: APIError.dataNotValid)
+        }
+
+        return decoded.result
       }
     )
   }()
