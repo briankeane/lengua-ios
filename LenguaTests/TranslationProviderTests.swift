@@ -79,6 +79,40 @@ struct TranslationProviderTests {
     }
   }
 
+  @Test func translationPairMatchesAcrossCanonicalizedLanguages() {
+    // Apple canonicalizes a live session's resolved languages (e.g. "en" →
+    // "en-Latn-US"). The broker derives its drain pair from the session but
+    // matches against request pairs built from minimal identifiers ("en"/"es").
+    // `matches` must compare language codes only, so the two still match — full
+    // `Locale.Language` equality would not, and every translation would hang.
+    let minimal = TranslationPair(
+      source: Locale.Language(identifier: "en"),
+      target: Locale.Language(identifier: "es")
+    )
+    let canonicalized = TranslationPair(
+      source: Locale.Language(identifier: "en-Latn-US"),
+      target: Locale.Language(identifier: "es-Latn-ES")
+    )
+    // Guard against a false-positive test: full equality really does differ,
+    // so `matches` is doing load-bearing work, not tautologically true.
+    #expect(minimal != canonicalized)
+    #expect(minimal.matches(canonicalized))
+    #expect(canonicalized.matches(minimal))
+  }
+
+  @Test func translationPairDoesNotMatchOppositeDirection() {
+    let enToEs = TranslationPair(
+      source: Locale.Language(identifier: "en"),
+      target: Locale.Language(identifier: "es")
+    )
+    let esToEn = TranslationPair(
+      source: Locale.Language(identifier: "es"),
+      target: Locale.Language(identifier: "en")
+    )
+    #expect(!enToEs.matches(esToEn))
+    #expect(!esToEn.matches(enToEs))
+  }
+
   @Test func brokerRebuildsConfigurationWhenPairChanges() async {
     // Enqueue en→es, then es→en; the second must produce a configuration for the
     // new pair rather than reusing the first. `TranslationSession.Configuration`

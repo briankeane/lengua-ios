@@ -8,6 +8,28 @@ import Translation
 struct TranslationPair: Sendable, Equatable {
   var source: Locale.Language
   var target: Locale.Language
+
+  /// True when both pairs describe the same translation direction, comparing
+  /// only `languageCode` (not script or region).
+  ///
+  /// Apple canonicalizes a `TranslationSession`'s resolved languages (e.g.
+  /// `"en"` → `"en-Latn-US"`), so a pair derived from a live session may not be
+  /// `==` a request pair built from minimal identifiers (`"en"` / `"es"`).
+  /// Full `Locale.Language` equality would then match nothing, hanging every
+  /// translation. Comparing language codes is canonicalization-proof and
+  /// sufficient for the app's en/es scope.
+  ///
+  /// Fail-closed on a missing code: if any `languageCode` is `nil` this returns
+  /// `false` rather than letting two unspecified languages coalesce (which a
+  /// plain `nil == nil` would). Unreachable for en/es, but this keeps a
+  /// malformed pair from ever draining through the wrong session.
+  func matches(_ other: TranslationPair) -> Bool {
+    guard
+      let selfSource = source.languageCode, let otherSource = other.source.languageCode,
+      let selfTarget = target.languageCode, let otherTarget = other.target.languageCode
+    else { return false }
+    return selfSource == otherSource && selfTarget == otherTarget
+  }
 }
 
 /// Live provider backed by Apple's on-device Translation framework (iOS 18+).
@@ -137,9 +159,14 @@ final class AppleTranslationBroker {
     // host) is dropped; the active drain already picks up newly-enqueued work.
     guard !isDraining else { return }
     isDraining = true
+    // The pair this session actually serves, derived below from the session
+    // itself. Captured for the defer so `rearmIfNeeded` can tell whether any
+    // leftover request is for a *different* pair (re-arm) or the same pair we
+    // just drained (do not re-arm — that would spin the host's task).
+    var drainedPair: TranslationPair?
     defer {
       isDraining = false
-      rearmIfNeeded()
+      rearmIfNeeded(afterDraining: drainedPair)
     }
 
     // Derive the pair from the session itself rather than the broker's
@@ -154,6 +181,7 @@ final class AppleTranslationBroker {
       return
     }
     let pair = TranslationPair(source: source, target: target)
+    drainedPair = pair
 
     do {
       // Ensures the language model is downloaded/ready, prompting the user if
@@ -168,12 +196,19 @@ final class AppleTranslationBroker {
 
     // Drain every queued request for this pair, including ones enqueued while an
     // earlier `session.translate` was awaiting. Leave other-pair requests queued.
+    // Match on `pair.matches(_:)` (language code), NOT `==`: Apple canonicalizes
+    // the session's languages (e.g. "en" → "en-Latn-US"), so full
+    // `Locale.Language` equality against a request pair built from "en"/"es"
+    // would match nothing and hang every translation.
     // Known tradeoff: this scans past other-pair requests rather than stopping
     // at the first one, so sustained same-pair traffic could in principle delay
     // a queued opposite-pair request indefinitely. Acceptable here — the
     // Translate page only ever has one in-flight request at a time, not a
     // continuous stream — but worth revisiting if usage changes.
-    while let id = queue.first(where: { requests[$0]?.pair == pair }) {
+    while let id = queue.first(where: { id in
+      guard let request = requests[id] else { return false }
+      return pair.matches(request.pair)
+    }) {
       queue.removeAll { $0 == id }
       guard let request = requests[id] else { continue }  // already cancelled
       do {
@@ -209,10 +244,19 @@ final class AppleTranslationBroker {
     }
   }
 
-  /// After a drain, if requests for a different pair remain, request a fresh
+  /// After a drain, if requests for a *different* pair remain, request a fresh
   /// session for the next one so it drains too.
-  private func rearmIfNeeded() {
+  ///
+  /// Zero-match guard: if the front pending request is for the pair we just
+  /// drained (`afterDraining`), do NOT re-arm. A fresh session would resolve to
+  /// the same pair and drain the same (zero) requests, so re-arming would spin
+  /// an unbounded `invalidate()`/`prepareTranslation` loop. This makes the
+  /// broker robust even if the pair-match logic ever fails to match a request
+  /// that should have been drained: at worst that request stays pending until a
+  /// genuinely different request arrives, instead of pinning the CPU.
+  private func rearmIfNeeded(afterDraining drainedPair: TranslationPair?) {
     guard let nextId = queue.first, let next = requests[nextId] else { return }
+    if let drainedPair, drainedPair.matches(next.pair) { return }
     requestSessionIfNeeded(for: next.pair)
   }
 
@@ -228,7 +272,13 @@ final class AppleTranslationBroker {
   /// pass `nil` to fail everything (e.g. when the last host unmounts).
   private func failAll(matching pair: TranslationPair? = nil, with error: Error) {
     let ids = requests.values
-      .filter { pair == nil || $0.pair == pair }
+      .filter { request in
+        // Match on language code (`matches`), not `==`, for the same
+        // canonicalization reason as the drain loop: a session-derived `pair`
+        // may not be `==` a request pair built from minimal identifiers.
+        guard let pair else { return true }
+        return pair.matches(request.pair)
+      }
       .map(\.id)
     for id in ids {
       finish(id, .failure(error))
