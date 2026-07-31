@@ -34,23 +34,31 @@ extension ErrorReportingClient: DependencyKey {
   static let liveValue = Self(
     reportError: { error, tags in
       #if canImport(Sentry)
-        SentrySDK.capture(error: error) { scope in
-          for (key, value) in tags { scope.setTag(value: value, key: key) }
+        // Sentry's capture path touches UIApplication.applicationState, which must
+        // run on the main thread; these closures are awaited off the main actor.
+        await MainActor.run {
+          SentrySDK.capture(error: error) { scope in
+            for (key, value) in tags { scope.setTag(value: value, key: key) }
+          }
         }
       #endif
     },
     reportErrorWithContext: { error, tags, contextKey, context in
       #if canImport(Sentry)
-        SentrySDK.capture(error: error) { scope in
-          for (key, value) in tags { scope.setTag(value: value, key: key) }
-          if !context.isEmpty { scope.setContext(value: context, key: contextKey) }
+        await MainActor.run {
+          SentrySDK.capture(error: error) { scope in
+            for (key, value) in tags { scope.setTag(value: value, key: key) }
+            if !context.isEmpty { scope.setContext(value: context, key: contextKey) }
+          }
         }
       #endif
     },
     reportMessage: { message, tags in
       #if canImport(Sentry)
-        SentrySDK.capture(message: message) { scope in
-          for (key, value) in tags { scope.setTag(value: value, key: key) }
+        await MainActor.run {
+          SentrySDK.capture(message: message) { scope in
+            for (key, value) in tags { scope.setTag(value: value, key: key) }
+          }
         }
       #endif
     }

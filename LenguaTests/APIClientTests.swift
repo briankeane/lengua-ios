@@ -1,5 +1,6 @@
 import CustomDump
 import Dependencies
+import Foundation
 import Testing
 
 @testable import Lengua
@@ -16,7 +17,7 @@ struct APIClientTests {
     expectNoDifference(result.minimumVersion, "1.2.3")
   }
 
-  func testGoogleSignInResponseDecodesUserAndToken() throws {
+  @Test func googleSignInResponseDecodesUserAndToken() throws {
     let json = Data(
       """
       {
@@ -35,10 +36,10 @@ struct APIClientTests {
 
     let decoded = try JSONDecoder().decode(GoogleSignInResponse.self, from: json)
 
-    XCTAssertEqual(decoded.token, "jwt-123")
-    XCTAssertEqual(decoded.user.id, "u1")
-    XCTAssertEqual(decoded.user.email, "sam@example.com")
-    XCTAssertEqual(decoded.user.firstName, "Sam")
-    XCTAssertEqual(decoded.user.profileImageUrl, "https://img/1.png")
+    expectNoDifference(decoded.token, "jwt-123")
+    expectNoDifference(decoded.user.id, "u1")
+    expectNoDifference(decoded.user.email, "sam@example.com")
+    expectNoDifference(decoded.user.firstName, "Sam")
+    expectNoDifference(decoded.user.profileImageUrl, "https://img/1.png")
   }
 }
