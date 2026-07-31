@@ -1,3 +1,4 @@
+import Dependencies
 import Foundation
 import Sharing
 import Testing
@@ -10,15 +11,42 @@ struct TranslationProviderTests {
   private let english = Locale.Language(identifier: "en")
   private let spanish = Locale.Language(identifier: "es")
 
+  /// Runs `body` with `defaultAppStorage` overridden to a fresh in-memory
+  /// `UserDefaults`, so any `@Shared(.translationProviderKind)` (or other
+  /// `.appStorage`-backed key) touched inside is quarantined from the real
+  /// `UserDefaults.standard`. Each call gets its own store, so nothing leaks
+  /// across tests or across repeated runs — the appStorage-backed default is
+  /// otherwise persisted process-wide and makes these tests non-deterministic.
+  ///
+  /// Reusable pattern: any future suite that reads/writes
+  /// `@Shared(.translationProviderKind)` (e.g. Task 2.2's `YouPageModelTests`)
+  /// should wrap that work the same way — `withDependencies { $0.defaultAppStorage
+  /// = .inMemory } operation: { ... }`. This uses only the core `Dependencies`
+  /// module (already available to the test target); it deliberately avoids
+  /// linking `DependenciesTestSupport`, which would flip every swift-testing test
+  /// into the `.test` dependency context and break existing suites that rely on
+  /// live-context dependency inheritance.
+  private func withInMemoryAppStorage<T>(_ body: () throws -> T) rethrows -> T {
+    try withDependencies {
+      $0.defaultAppStorage = .inMemory
+    } operation: {
+      try body()
+    }
+  }
+
   @Test func defaultProviderIsApple() {
-    #expect(TranslationProviderSelector.current == .apple)
+    withInMemoryAppStorage {
+      #expect(TranslationProviderSelector.current == .apple)
+    }
   }
 
   @Test func selectorFollowsPersistedPreference() {
-    @Shared(.translationProviderKind) var kind = .deepL
-    #expect(TranslationProviderSelector.current == .deepL)
-    $kind.withLock { $0 = .apple }
-    #expect(TranslationProviderSelector.current == .apple)
+    withInMemoryAppStorage {
+      @Shared(.translationProviderKind) var kind = .deepL
+      #expect(TranslationProviderSelector.current == .deepL)
+      $kind.withLock { $0 = .apple }
+      #expect(TranslationProviderSelector.current == .apple)
+    }
   }
 
   @Test func deepLIsDisabledAppleIsEnabled() {
