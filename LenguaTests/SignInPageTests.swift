@@ -4,23 +4,23 @@ import CustomDump
 import Dependencies
 import Foundation
 import Sharing
-import XCTest
+import Testing
 
 @testable import Lengua
 
 @MainActor
-final class SignInPageTests: XCTestCase {
-  func testDisplayTextMatchesMockup() {
+struct SignInPageTests {
+  @Test func displayTextMatchesMockup() {
     @Shared(.auth) var auth = Auth()
     let model = SignInPageModel()
-    XCTAssertEqual(model.titleText, "Lengua")
-    XCTAssertEqual(model.subtitleText, "Look it up. Keep it. Say it back.")
-    XCTAssertEqual(model.googleSignInButtonTitle, "Sign in with Google")
-    XCTAssertEqual(model.appleSignInButtonTitle, "Sign in with Apple")
-    XCTAssertFalse(model.isAppleSignInEnabled)
+    expectNoDifference(model.titleText, "Lengua")
+    expectNoDifference(model.subtitleText, "Look it up. Keep it. Say it back.")
+    expectNoDifference(model.googleSignInButtonTitle, "Sign in with Google")
+    expectNoDifference(model.appleSignInButtonTitle, "Sign in with Apple")
+    #expect(!model.isAppleSignInEnabled)
   }
 
-  func testSignInWithGoogleTracksSignInStartedEvent() async {
+  @Test func signInWithGoogleTracksSignInStartedEvent() async {
     @Shared(.auth) var auth = Auth()
     let capturedEvents = LockIsolated<[AnalyticsEvent]>([])
 
@@ -35,14 +35,14 @@ final class SignInPageTests: XCTestCase {
 
     await model.signInWithGoogleButtonTapped()
 
-    XCTAssertTrue(
+    #expect(
       capturedEvents.value.contains {
         if case .signInStarted(let method) = $0 { return method == .google }
         return false
       })
   }
 
-  func testSignInWithGooglePresentsAlertWhenNoKeyWindow() async {
+  @Test func signInWithGooglePresentsAlertWhenNoKeyWindow() async {
     @Shared(.auth) var auth = Auth()
     let reportedMessages = LockIsolated<[String]>([])
 
@@ -59,10 +59,10 @@ final class SignInPageTests: XCTestCase {
     await model.signInWithGoogleButtonTapped()
 
     expectNoDifference(model.presentedAlert, .signInError)
-    XCTAssertEqual(reportedMessages.value.count, 1)
+    expectNoDifference(reportedMessages.value.count, 1)
   }
 
-  func testHandleSignInAPIFailureShowsNetworkAlertOnSSLError() async {
+  @Test func handleSignInAPIFailureShowsNetworkAlertOnSSLError() async {
     @Shared(.auth) var auth = Auth()
     let model = withDependencies {
       $0.analytics.track = { _ in }
@@ -79,7 +79,7 @@ final class SignInPageTests: XCTestCase {
     expectNoDifference(model.presentedAlert, .signInNetworkError)
   }
 
-  func testHandleSignInAPIFailureShowsGenericAlertOnUnknownError() async {
+  @Test func handleSignInAPIFailureShowsGenericAlertOnUnknownError() async {
     @Shared(.auth) var auth = Auth()
     let model = withDependencies {
       $0.analytics.track = { _ in }
@@ -96,7 +96,7 @@ final class SignInPageTests: XCTestCase {
     expectNoDifference(model.presentedAlert, .signInError)
   }
 
-  func testHandleSignInAPIFailureTracksAndReportsWithTags() async {
+  @Test func handleSignInAPIFailureTracksAndReportsWithTags() async {
     @Shared(.auth) var auth = Auth()
     let capturedEvents = LockIsolated<[AnalyticsEvent]>([])
     let reportedTags = LockIsolated<[String: String]>([:])
@@ -113,10 +113,10 @@ final class SignInPageTests: XCTestCase {
     let genericError = NSError(domain: "com.google.GIDSignIn", code: -4)
     await model.handleSignInAPIFailure(genericError, authMethod: .google, step: "api_call")
 
-    XCTAssertEqual(reportedTags.value["auth_method"], "google")
-    XCTAssertEqual(reportedTags.value["error_domain"], "com.google.GIDSignIn")
-    XCTAssertEqual(reportedTags.value["error_code"], "-4")
-    XCTAssertTrue(
+    expectNoDifference(reportedTags.value["auth_method"], "google")
+    expectNoDifference(reportedTags.value["error_domain"], "com.google.GIDSignIn")
+    expectNoDifference(reportedTags.value["error_code"], "-4")
+    #expect(
       capturedEvents.value.contains {
         if case .signInFailed(let method, _) = $0 { return method == .google }
         return false

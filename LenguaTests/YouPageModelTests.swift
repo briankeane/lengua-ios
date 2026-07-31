@@ -2,23 +2,23 @@ import ConcurrencyExtras
 import CustomDump
 import Dependencies
 import Sharing
-import XCTest
+import Testing
 
 @testable import Lengua
 
 @MainActor
-final class YouPageModelTests: XCTestCase {
-  func testTitleIsYou() {
+struct YouPageModelTests {
+  @Test func titleIsYou() {
     let model = YouPageModel()
     expectNoDifference(model.title, "You")
   }
 
-  func testSignOutButtonTitle() {
+  @Test func signOutButtonTitleIsSignOut() {
     let model = YouPageModel()
     expectNoDifference(model.signOutButtonTitle, "Sign Out")
   }
 
-  func testDisplayNameAndEmailReflectCurrentUser() {
+  @Test func displayNameAndEmailReflectCurrentUser() {
     @Shared(.auth) var auth = Auth(
       jwtToken: "t",
       currentUser: User(
@@ -28,14 +28,14 @@ final class YouPageModelTests: XCTestCase {
     expectNoDifference(model.emailText, "a@b.com")
   }
 
-  func testDisplayNameFallsBackWhenNoName() {
+  @Test func displayNameFallsBackWhenNoName() {
     @Shared(.auth) var auth = Auth()
     let model = YouPageModel()
     expectNoDifference(model.displayName, "Signed in")
-    XCTAssertNil(model.emailText)
+    #expect(model.emailText == nil)
   }
 
-  func testSignOutButtonTappedCallsAuthClientSignOut() async {
+  @Test func signOutButtonTappedCallsAuthClientSignOut() async {
     @Shared(.auth) var auth = Auth(jwtToken: "t")
     let signedOut = LockIsolated(false)
     let model = withDependencies {
@@ -46,6 +46,6 @@ final class YouPageModelTests: XCTestCase {
 
     await model.signOutButtonTapped()
 
-    XCTAssertTrue(signedOut.value)
+    #expect(signedOut.value)
   }
 }
