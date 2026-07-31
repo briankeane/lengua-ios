@@ -8,6 +8,7 @@ final class TranslatePageModel: ViewModel {
   // MARK: - Dependencies
   @ObservationIgnored @Dependency(\.translator) var translator
   @ObservationIgnored @Dependency(\.continuousClock) var clock
+  @ObservationIgnored @Dependency(\.speechSynthesizer) var speechSynthesizer
 
   // MARK: - Initialization
   override init() { super.init() }
@@ -35,7 +36,14 @@ final class TranslatePageModel: ViewModel {
     outputText = previousInput  // show the swapped text immediately
   }
 
-  func speakerButtonTapped() async {}  // wired in Stage 4
+  func speakerButtonTapped() async {
+    guard !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    do {
+      try await speechSynthesizer.speak(outputText, direction.speechSynthesisLanguageIdentifier)
+    } catch {
+      presentedAlert = .speechSynthesisFailed
+    }
+  }
   func micButtonTapped() {}  // wired in Stage 5
 
   // MARK: - View Helpers

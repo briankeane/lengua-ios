@@ -60,4 +60,10 @@ extension LenguaAlert {
       title: "Translation Failed",
       message: "We couldn't translate that just now. Check your connection and try again.")
   }
+
+  static var speechSynthesisFailed: LenguaAlert {
+    LenguaAlert(
+      title: "Couldn't Play Audio",
+      message: "We couldn't read that aloud just now. Please try again.")
+  }
 }

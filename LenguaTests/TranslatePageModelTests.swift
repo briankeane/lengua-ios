@@ -154,4 +154,54 @@ struct TranslatePageModelTests {
     expectNoDifference(model.outputText, "")
     #expect(model.isTranslating == false)
   }
+
+  @Test func speakerSpeaksOutputInTargetLanguage() async {
+    let clock = TestClock()
+    let spoken = LockIsolated<(String, String)?>(nil)
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "Hola" }
+      $0.speechSynthesizer.speak = { text, language in spoken.setValue((text, language)) }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "Hello"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    await model.speakerButtonTapped()
+    expectNoDifference(spoken.value?.0, "Hola")
+    expectNoDifference(spoken.value?.1, "es-ES")  // target of englishToSpanish
+  }
+
+  @Test func speakerDoesNothingWhenOutputEmpty() async {
+    let called = LockIsolated(false)
+    let model = withDependencies {
+      $0.speechSynthesizer.speak = { _, _ in called.setValue(true) }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    await model.speakerButtonTapped()
+    #expect(called.value == false)
+  }
+
+  @Test func speakerErrorSurfacesAlert() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "Hola" }
+      $0.speechSynthesizer.speak = { _, _ in throw TranslatorError.notReady }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "Hello"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    await model.speakerButtonTapped()
+    expectNoDifference(model.presentedAlert, .speechSynthesisFailed)
+  }
 }
