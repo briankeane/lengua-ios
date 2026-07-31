@@ -1,6 +1,37 @@
 import Foundation
+import Sharing
 import SwiftUI
 import Translation
+
+/// A concrete source→target language pair. Session identity in the broker
+/// includes the pair, so a direction flip forces a fresh session instead of
+/// reusing one configured for the previous pair.
+struct TranslationPair: Sendable, Equatable {
+  var source: Locale.Language
+  var target: Locale.Language
+
+  /// True when both pairs describe the same translation direction, comparing
+  /// only `languageCode` (not script or region).
+  ///
+  /// Apple canonicalizes a `TranslationSession`'s resolved languages (e.g.
+  /// `"en"` → `"en-Latn-US"`), so a pair derived from a live session may not be
+  /// `==` a request pair built from minimal identifiers (`"en"` / `"es"`).
+  /// Full `Locale.Language` equality would then match nothing, hanging every
+  /// translation. Comparing language codes is canonicalization-proof and
+  /// sufficient for the app's en/es scope.
+  ///
+  /// Fail-closed on a missing code: if any `languageCode` is `nil` this returns
+  /// `false` rather than letting two unspecified languages coalesce (which a
+  /// plain `nil == nil` would). Unreachable for en/es, but this keeps a
+  /// malformed pair from ever draining through the wrong session.
+  func matches(_ other: TranslationPair) -> Bool {
+    guard
+      let selfSource = source.languageCode, let otherSource = other.source.languageCode,
+      let selfTarget = target.languageCode, let otherTarget = other.target.languageCode
+    else { return false }
+    return selfSource == otherSource && selfTarget == otherTarget
+  }
+}
 
 /// Live provider backed by Apple's on-device Translation framework (iOS 18+).
 ///
@@ -48,8 +79,9 @@ struct AppleTranslationProvider: TranslationProvider {
 /// which sidesteps the "retained session invalidated when the task re-runs"
 /// pitfall — each drain uses only the session handed to it for that run.
 ///
-/// Assumes a single active language pair at a time, which matches the fixed
-/// English → Spanish scope (`TranslatorClient` only ever requests en → es).
+/// Session identity includes the active language pair (`TranslationPair`), so
+/// a direction flip forces a fresh session rather than draining through one
+/// configured for the previous pair.
 @MainActor
 @Observable
 final class AppleTranslationBroker {
@@ -58,6 +90,10 @@ final class AppleTranslationBroker {
   /// Drives the host's `.translationTask`. Setting it (or calling
   /// `invalidate()`) causes the host to request a fresh session.
   var configuration: TranslationSession.Configuration?
+
+  /// The language pair the current `configuration` was built for. Session
+  /// identity = this pair; a request for a different pair forces a rebuild.
+  @ObservationIgnored private var activePair: TranslationPair?
 
   /// Unresolved requests keyed by id. Presence == not yet resumed; `finish`
   /// removes the entry, so every continuation is resumed exactly once even when
@@ -73,6 +109,7 @@ final class AppleTranslationBroker {
   private struct PendingRequest {
     let id: UUID
     let text: String
+    let pair: TranslationPair
     let continuation: CheckedContinuation<String, Error>
   }
 
@@ -100,12 +137,13 @@ final class AppleTranslationBroker {
     // Translation UI is absent). Fail fast rather than suspending indefinitely.
     guard mountedHostCount > 0 else { throw TranslatorError.notReady }
 
+    let pair = TranslationPair(source: source, target: target)
     let id = UUID()
     return try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
-        requests[id] = PendingRequest(id: id, text: text, continuation: continuation)
+        requests[id] = PendingRequest(id: id, text: text, pair: pair, continuation: continuation)
         queue.append(id)
-        requestSessionIfNeeded(source: source, target: target)
+        requestSessionIfNeeded(for: pair)
       }
     } onCancel: {
       Task { @MainActor [weak self] in self?.finish(id, .failure(CancellationError())) }
@@ -113,14 +151,37 @@ final class AppleTranslationBroker {
   }
 
   /// Called by the host with a live session. Prepares the on-device model, then
-  /// translates every queued request — including ones enqueued while an earlier
-  /// `session.translate` is awaiting — through this one session.
+  /// translates every queued request for the pair this session was configured
+  /// for — including ones enqueued while an earlier `session.translate` is
+  /// awaiting — through this one session. Requests for a different pair (e.g.
+  /// enqueued after a direction flip) are left queued and re-armed afterward.
   func drainQueue(using session: TranslationSession) async {
     // Only one drain runs at a time. A redundant session (e.g. a second mounted
     // host) is dropped; the active drain already picks up newly-enqueued work.
     guard !isDraining else { return }
     isDraining = true
-    defer { isDraining = false }
+    // The pair this session actually serves, derived below from the session
+    // itself. Captured for the defer so `rearmIfNeeded` can tell whether any
+    // leftover request is for a *different* pair (re-arm) or the same pair we
+    // just drained (do not re-arm — that would spin the host's task).
+    var drainedPair: TranslationPair?
+    defer {
+      isDraining = false
+      rearmIfNeeded(afterDraining: drainedPair)
+    }
+
+    // Determine which pair this session serves. A `.translationTask`-vended
+    // session reports `nil` source/target languages (those are only populated on
+    // sessions constructed via `init(installedSource:target:)`), so we cannot
+    // depend on them — we fall back to `activePair`, the pair the broker
+    // configured this session for. See `drainPair` for the failure this avoids.
+    guard
+      let pair = Self.drainPair(
+        sessionSource: session.sourceLanguage,
+        sessionTarget: session.targetLanguage,
+        activePair: activePair)
+    else { return }
+    drainedPair = pair
 
     do {
       // Ensures the language model is downloaded/ready, prompting the user if
@@ -128,32 +189,116 @@ final class AppleTranslationBroker {
       // `.downloadRequired` rather than an opaque translate failure.
       try await session.prepareTranslation()
     } catch {
-      failAll(with: TranslatorError.downloadRequired)
+      // Only fail requests for THIS pair; other-pair requests are re-armed.
+      failAll(matching: pair, with: TranslatorError.downloadRequired)
       return
     }
 
-    while let id = queue.first {
-      queue.removeFirst()
+    // Drain every queued request for this pair, including ones enqueued while an
+    // earlier `session.translate` was awaiting. Leave other-pair requests queued.
+    // Match on `pair.matches(_:)` (language code), NOT `==`: Apple canonicalizes
+    // the session's languages (e.g. "en" → "en-Latn-US"), so full
+    // `Locale.Language` equality against a request pair built from "en"/"es"
+    // would match nothing and hang every translation.
+    // Known tradeoff: this scans past other-pair requests rather than stopping
+    // at the first one, so sustained same-pair traffic could in principle delay
+    // a queued opposite-pair request indefinitely. Acceptable here — the
+    // Translate page only ever has one in-flight request at a time, not a
+    // continuous stream — but worth revisiting if usage changes.
+    while let id = queue.first(where: { id in
+      guard let request = requests[id] else { return false }
+      return pair.matches(request.pair)
+    }) {
+      queue.removeAll { $0 == id }
       guard let request = requests[id] else { continue }  // already cancelled
       do {
         let response = try await session.translate(request.text)
-        finish(id, .success(response.targetText))
+        // Verify the session actually translated the requested direction before
+        // delivering the result. A vended session reports nil identifying
+        // languages, so `drainPair` can only fall back to `activePair`; if a
+        // session for one direction is delivered after `activePair` advanced to
+        // the other, this loop could otherwise drain a request through the wrong
+        // session. The `Response` DOES carry non-nil source/target languages, so
+        // we check them here. On a mismatch we re-queue the request (rather than
+        // return wrong-direction text) and stop; `rearmIfNeeded` then requests a
+        // fresh session for the correct pair.
+        let responsePair = TranslationPair(
+          source: response.sourceLanguage, target: response.targetLanguage)
+        if responsePair.matches(request.pair) {
+          finish(id, .success(response.targetText))
+        } else {
+          queue.insert(id, at: 0)
+          break
+        }
       } catch {
         finish(id, .failure(TranslatorError.translationFailed(String(describing: error))))
       }
     }
   }
 
-  private func requestSessionIfNeeded(source: Locale.Language, target: Locale.Language) {
-    if configuration == nil {
-      configuration = TranslationSession.Configuration(source: source, target: target)
-    } else if !isDraining {
-      // A session already exists but no drain is running: re-run the host's
-      // translation task to obtain a fresh session for the new request. While a
-      // drain IS running, the loop above already picks up newly-enqueued
-      // requests, so invalidating would needlessly cancel the active session.
+  /// The language pair a delivered session actually serves.
+  ///
+  /// A session vended by SwiftUI's `.translationTask(_:)` reports `nil`
+  /// `sourceLanguage`/`targetLanguage` (those are only populated on sessions
+  /// built with `init(installedSource:target:)`). So prefer the session's own
+  /// languages when present, but fall back to `activePair` — the pair the broker
+  /// configured the session for — when they are `nil`.
+  ///
+  /// Regression guard: a prior version REQUIRED the session's languages and
+  /// returned early when they were `nil`. Because vended sessions always report
+  /// `nil`, that early return ran on every real translation: `prepareTranslation()`
+  /// was never called (no model-download prompt) and no queued request was ever
+  /// drained, so translations silently never appeared. Kept as a pure static
+  /// function so this behaviour is unit-testable without a live `TranslationSession`.
+  static func drainPair(
+    sessionSource: Locale.Language?,
+    sessionTarget: Locale.Language?,
+    activePair: TranslationPair?
+  ) -> TranslationPair? {
+    if let sessionSource, let sessionTarget {
+      return TranslationPair(source: sessionSource, target: sessionTarget)
+    }
+    return activePair
+  }
+
+  private func requestSessionIfNeeded(for pair: TranslationPair) {
+    // While a drain is in flight, never touch `configuration`. If the drain is
+    // for this same pair, its loop already picks up newly-enqueued same-pair
+    // requests — no new session needed. If it's for a different pair,
+    // rebuilding `configuration` now would restart the host's
+    // `.translationTask` and risk cancelling the still-running drain.
+    // `rearmIfNeeded()` requests a fresh session for a leftover pair once the
+    // active drain completes.
+    guard !isDraining else { return }
+
+    if activePair != pair {
+      // New pair: force a fresh session configured for it. Setting a new
+      // configuration re-runs the host's `.translationTask`.
+      activePair = pair
+      configuration = TranslationSession.Configuration(source: pair.source, target: pair.target)
+    } else if configuration == nil {
+      configuration = TranslationSession.Configuration(source: pair.source, target: pair.target)
+    } else {
+      // Same pair, session exists: re-run the task to get a fresh session for
+      // the newly-enqueued request.
       configuration?.invalidate()
     }
+  }
+
+  /// After a drain, if requests for a *different* pair remain, request a fresh
+  /// session for the next one so it drains too.
+  ///
+  /// Zero-match guard: if the front pending request is for the pair we just
+  /// drained (`afterDraining`), do NOT re-arm. A fresh session would resolve to
+  /// the same pair and drain the same (zero) requests, so re-arming would spin
+  /// an unbounded `invalidate()`/`prepareTranslation` loop. This makes the
+  /// broker robust even if the pair-match logic ever fails to match a request
+  /// that should have been drained: at worst that request stays pending until a
+  /// genuinely different request arrives, instead of pinning the CPU.
+  private func rearmIfNeeded(afterDraining drainedPair: TranslationPair?) {
+    guard let nextId = queue.first, let next = requests[nextId] else { return }
+    if let drainedPair, drainedPair.matches(next.pair) { return }
+    requestSessionIfNeeded(for: next.pair)
   }
 
   /// Resolves a single request exactly once. A no-op if it was already resolved
@@ -164,12 +309,20 @@ final class AppleTranslationBroker {
     request.continuation.resume(with: result)
   }
 
-  private func failAll(with error: Error) {
-    let all = requests
-    requests.removeAll()
-    queue.removeAll()
-    for request in all.values {
-      request.continuation.resume(throwing: error)
+  /// Fails pending requests. Pass a `pair` to fail only that pair's requests;
+  /// pass `nil` to fail everything (e.g. when the last host unmounts).
+  private func failAll(matching pair: TranslationPair? = nil, with error: Error) {
+    let ids = requests.values
+      .filter { request in
+        // Match on language code (`matches`), not `==`, for the same
+        // canonicalization reason as the drain loop: a session-derived `pair`
+        // may not be `==` a request pair built from minimal identifiers.
+        guard let pair else { return true }
+        return pair.matches(request.pair)
+      }
+      .map(\.id)
+    for id in ids {
+      finish(id, .failure(error))
     }
   }
 }
@@ -194,8 +347,10 @@ struct AppleTranslationHost: View {
 /// session host; cloud providers (DeepL) need none, so this gates on the active
 /// provider and app composition stays provider-agnostic.
 struct TranslatorHost: View {
+  @Shared(.translationProviderKind) var providerKind
+
   var body: some View {
-    if TranslationProviderSelector.current == .apple {
+    if providerKind == .apple {
       AppleTranslationHost()
     }
   }

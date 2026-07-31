@@ -7,43 +7,47 @@ import Testing
 
 @MainActor
 struct TranslatorClientTests {
-  @Test func translateUsesInjectedDependency() async throws {
+  @Test func translatePassesTextAndDirectionToDependency() async throws {
     let result = try await withDependencies {
-      $0.translator.translate = { englishText in
-        expectNoDifference(englishText, "Hello")
+      $0.translator.translate = { text, direction in
+        expectNoDifference(text, "Hello")
+        expectNoDifference(direction, .englishToSpanish)
         return "Hola"
       }
     } operation: {
       @Dependency(\.translator) var translator
-      return try await translator.translate("Hello")
+      return try await translator.translate("Hello", .englishToSpanish)
     }
     expectNoDifference(result, "Hola")
   }
 
-  @Test func availabilityUsesInjectedDependency() async {
+  @Test func availabilityPassesDirectionToDependency() async {
     let result = await withDependencies {
-      $0.translator.availability = { .downloadRequired }
+      $0.translator.availability = { direction in
+        expectNoDifference(direction, .spanishToEnglish)
+        return .downloadRequired
+      }
     } operation: {
       @Dependency(\.translator) var translator
-      return await translator.availability()
+      return await translator.availability(.spanishToEnglish)
     }
     expectNoDifference(result, .downloadRequired)
   }
 
   @Test func liveClientReturnsEmptyForBlankInputWithoutHittingProvider() async throws {
-    // Exercises the real live client contract: blank input short-circuits to ""
-    // before any provider is invoked, so it is safe to call in the Simulator.
-    let result = try await TranslatorClient.liveValue.translate("   \n\t ")
+    // Blank input short-circuits to "" before any provider is invoked (safe in
+    // the Simulator, where the Apple provider cannot run).
+    let result = try await TranslatorClient.liveValue.translate("   \n\t ", .englishToSpanish)
     expectNoDifference(result, "")
   }
 
   @Test func translatePropagatesProviderError() async {
     await #expect(throws: TranslatorError.notImplemented) {
       try await withDependencies {
-        $0.translator.translate = { _ in throw TranslatorError.notImplemented }
+        $0.translator.translate = { _, _ in throw TranslatorError.notImplemented }
       } operation: {
         @Dependency(\.translator) var translator
-        return try await translator.translate("Hello")
+        return try await translator.translate("Hello", .englishToSpanish)
       }
     }
   }

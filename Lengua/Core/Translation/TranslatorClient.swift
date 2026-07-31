@@ -2,7 +2,8 @@ import Dependencies
 import DependenciesMacros
 import Foundation
 
-/// Shared service that translates English into Spanish.
+/// Shared service that translates text between English and Spanish in a
+/// given `TranslationDirection`.
 ///
 /// Call sites only ever touch this client (`@Dependency(\.translator)`); the
 /// underlying provider (Apple on-device now, DeepL later) is an implementation
@@ -10,15 +11,15 @@ import Foundation
 /// changes. See `TranslationProvider` for the provider seam.
 @DependencyClient
 struct TranslatorClient: Sendable {
-  /// Translates English `text` into Spanish. Empty / whitespace-only input
+  /// Translates `text` in the given `direction`. Empty / whitespace-only input
   /// resolves to an empty string without invoking a provider.
-  var translate: @Sendable (_ englishText: String) async throws -> String
+  var translate:
+    @Sendable (_ text: String, _ direction: TranslationDirection) async throws -> String
 
-  /// Whether the active provider can translate English → Spanish right now,
-  /// or needs a model download, or does not support the pair. Safe to call
-  /// before `translate` to drive UI (e.g. prompt a download) rather than
-  /// surfacing a first-call failure.
-  var availability: @Sendable () async -> TranslatorAvailability = { .unknown }
+  /// Whether the active provider can translate `direction` right now, needs a
+  /// model download, or does not support the pair.
+  var availability: @Sendable (_ direction: TranslationDirection) async -> TranslatorAvailability =
+    { _ in .unknown }
 }
 
 /// Domain error for translation. Named `TranslatorError` (not `TranslationError`)
@@ -28,7 +29,7 @@ enum TranslatorError: Error, Equatable {
   case notReady
   /// The language model must be downloaded before translating.
   case downloadRequired
-  /// The English → Spanish pair is not supported on this device.
+  /// The requested language pair is not supported on this device.
   case unsupportedLanguagePair
   /// The selected provider has not been implemented (e.g. the DeepL stub).
   case notImplemented
@@ -36,7 +37,7 @@ enum TranslatorError: Error, Equatable {
   case translationFailed(String)
 }
 
-/// Readiness of the active provider for the English → Spanish pair.
+/// Readiness of the active provider for the requested language pair.
 enum TranslatorAvailability: Equatable, Sendable {
   /// Ready to translate immediately.
   case installed

@@ -1,4 +1,6 @@
+import Dependencies
 import Foundation
+import Sharing
 import Testing
 
 @testable import Lengua
@@ -9,8 +11,73 @@ struct TranslationProviderTests {
   private let english = Locale.Language(identifier: "en")
   private let spanish = Locale.Language(identifier: "es")
 
+  /// Runs `body` with `defaultAppStorage` overridden to a fresh in-memory
+  /// `UserDefaults`, so any `@Shared(.translationProviderKind)` (or other
+  /// `.appStorage`-backed key) touched inside is quarantined from the real
+  /// `UserDefaults.standard`. Each call gets its own store, so nothing leaks
+  /// across tests or across repeated runs — the appStorage-backed default is
+  /// otherwise persisted process-wide and makes these tests non-deterministic.
+  ///
+  /// Reusable pattern: any future suite that reads/writes
+  /// `@Shared(.translationProviderKind)` (e.g. Task 2.2's `YouPageModelTests`)
+  /// should wrap that work the same way — `withDependencies { $0.defaultAppStorage
+  /// = .inMemory } operation: { ... }`. This uses only the core `Dependencies`
+  /// module (already available to the test target); it deliberately avoids
+  /// linking `DependenciesTestSupport`, which would flip every swift-testing test
+  /// into the `.test` dependency context and break existing suites that rely on
+  /// live-context dependency inheritance.
+  private func withInMemoryAppStorage<T>(_ body: () throws -> T) rethrows -> T {
+    try withDependencies {
+      $0.defaultAppStorage = .inMemory
+    } operation: {
+      try body()
+    }
+  }
+
+  // MARK: - drainPair (regression: no translation shown / no download prompt)
+
+  @Test func drainPairFallsBackToActivePairWhenSessionLanguagesAreNil() {
+    // A `.translationTask`-vended session reports nil source/target languages.
+    // The broken version required them and returned early — so the drain never
+    // called prepareTranslation() (no model-download prompt) and never
+    // translated. drainPair MUST fall back to the configured activePair here.
+    let active = TranslationPair(source: english, target: spanish)
+    let pair = AppleTranslationBroker.drainPair(
+      sessionSource: nil, sessionTarget: nil, activePair: active)
+    #expect(pair == active)
+  }
+
+  @Test func drainPairPrefersSessionLanguagesWhenPresent() {
+    let pair = AppleTranslationBroker.drainPair(
+      sessionSource: spanish, sessionTarget: english,
+      activePair: TranslationPair(source: english, target: spanish))
+    #expect(pair == TranslationPair(source: spanish, target: english))
+  }
+
+  @Test func drainPairIsNilWhenNoSessionLanguagesAndNoActivePair() {
+    let pair = AppleTranslationBroker.drainPair(
+      sessionSource: nil, sessionTarget: nil, activePair: nil)
+    #expect(pair == nil)
+  }
+
   @Test func defaultProviderIsApple() {
-    #expect(TranslationProviderSelector.current == .apple)
+    withInMemoryAppStorage {
+      #expect(TranslationProviderSelector.current == .apple)
+    }
+  }
+
+  @Test func selectorFollowsPersistedPreference() {
+    withInMemoryAppStorage {
+      @Shared(.translationProviderKind) var kind = .deepL
+      #expect(TranslationProviderSelector.current == .deepL)
+      $kind.withLock { $0 = .apple }
+      #expect(TranslationProviderSelector.current == .apple)
+    }
+  }
+
+  @Test func deepLIsDisabledAppleIsEnabled() {
+    #expect(TranslationProviderKind.apple.isEnabled == true)
+    #expect(TranslationProviderKind.deepL.isEnabled == false)
   }
 
   @Test func selectorReturnsAppleProviderForApple() {
@@ -77,5 +144,71 @@ struct TranslationProviderTests {
     await #expect(throws: CancellationError.self) {
       try await task.value
     }
+  }
+
+  @Test func translationPairMatchesAcrossCanonicalizedLanguages() {
+    // Apple canonicalizes a live session's resolved languages (e.g. "en" →
+    // "en-Latn-US"). The broker derives its drain pair from the session but
+    // matches against request pairs built from minimal identifiers ("en"/"es").
+    // `matches` must compare language codes only, so the two still match — full
+    // `Locale.Language` equality would not, and every translation would hang.
+    let minimal = TranslationPair(
+      source: Locale.Language(identifier: "en"),
+      target: Locale.Language(identifier: "es")
+    )
+    let canonicalized = TranslationPair(
+      source: Locale.Language(identifier: "en-Latn-US"),
+      target: Locale.Language(identifier: "es-Latn-ES")
+    )
+    // Guard against a false-positive test: full equality really does differ,
+    // so `matches` is doing load-bearing work, not tautologically true.
+    #expect(minimal != canonicalized)
+    #expect(minimal.matches(canonicalized))
+    #expect(canonicalized.matches(minimal))
+  }
+
+  @Test func translationPairDoesNotMatchOppositeDirection() {
+    let enToEs = TranslationPair(
+      source: Locale.Language(identifier: "en"),
+      target: Locale.Language(identifier: "es")
+    )
+    let esToEn = TranslationPair(
+      source: Locale.Language(identifier: "es"),
+      target: Locale.Language(identifier: "en")
+    )
+    #expect(!enToEs.matches(esToEn))
+    #expect(!esToEn.matches(enToEs))
+  }
+
+  @Test func brokerRebuildsConfigurationWhenPairChanges() async {
+    // Enqueue en→es, then es→en; the second must produce a configuration for the
+    // new pair rather than reusing the first. `TranslationSession.Configuration`
+    // exposes readable `source`/`target` on this SDK (confirmed via the
+    // Translation.swiftinterface), so we observe the configuration flips to the
+    // new source/target directly. Requests are left suspended (no real session
+    // in tests) and released when the host unmounts.
+    let english = Locale.Language(identifier: "en")
+    let spanish = Locale.Language(identifier: "es")
+    let broker = AppleTranslationBroker()
+    broker.hostDidMount()
+
+    let first = Task { @MainActor in
+      try await broker.translate("Hello", from: english, to: spanish)
+    }
+    await Task.yield()
+    let firstConfig = broker.configuration
+    #expect(firstConfig?.source == english)
+    #expect(firstConfig?.target == spanish)
+
+    let second = Task { @MainActor in
+      try await broker.translate("Hola", from: spanish, to: english)
+    }
+    await Task.yield()
+    #expect(broker.configuration?.source == spanish)
+    #expect(broker.configuration?.target == english)
+
+    broker.hostDidUnmount()  // releases both waiters with .notReady
+    _ = await first.result
+    _ = await second.result
   }
 }
