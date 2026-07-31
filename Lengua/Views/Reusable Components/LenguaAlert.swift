@@ -66,4 +66,18 @@ extension LenguaAlert {
       title: "Couldn't Play Audio",
       message: "We couldn't read that aloud just now. Please try again.")
   }
+
+  static var speechRecognitionPermissionDenied: LenguaAlert {
+    LenguaAlert(
+      title: "Microphone Access Needed",
+      message:
+        "To speak your translation, allow microphone and speech recognition "
+        + "access for Lengua in Settings.")
+  }
+
+  static var speechRecognitionFailed: LenguaAlert {
+    LenguaAlert(
+      title: "Couldn't Hear You",
+      message: "Speech recognition stopped unexpectedly. Please try again.")
+  }
 }

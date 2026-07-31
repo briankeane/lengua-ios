@@ -9,6 +9,7 @@ final class TranslatePageModel: ViewModel {
   @ObservationIgnored @Dependency(\.translator) var translator
   @ObservationIgnored @Dependency(\.continuousClock) var clock
   @ObservationIgnored @Dependency(\.speechSynthesizer) var speechSynthesizer
+  @ObservationIgnored @Dependency(\.speechRecognizer) var speechRecognizer
 
   // MARK: - Initialization
   override init() { super.init() }
@@ -23,9 +24,11 @@ final class TranslatePageModel: ViewModel {
   }
   var outputText = ""
   var isTranslating = false
+  var isRecording = false
   var presentedAlert: LenguaAlert?
 
   @ObservationIgnored private(set) var translationTask: Task<Void, Never>?
+  @ObservationIgnored private(set) var recognitionTask: Task<Void, Never>?
 
   // MARK: - User Actions
   func swapButtonTapped() {
@@ -39,8 +42,10 @@ final class TranslatePageModel: ViewModel {
   func pageDisappeared() {
     // Cancel any in-flight/debouncing translation so a request that fails while
     // the user is on another tab can't set `presentedAlert` and surface a stale
-    // "Translation Failed" alert when they return.
+    // "Translation Failed" alert when they return. Also stop dictation so the mic
+    // and record audio session are released when leaving the tab.
     translationTask?.cancel()
+    recognitionTask?.cancel()
   }
 
   func speakerButtonTapped() async {
@@ -51,7 +56,35 @@ final class TranslatePageModel: ViewModel {
       presentedAlert = .speechSynthesisFailed
     }
   }
-  func micButtonTapped() {}  // wired in Stage 5
+
+  func micButtonTapped() {
+    if isRecording {
+      recognitionTask?.cancel()
+      return
+    }
+    // Set `isRecording` synchronously so a second tap toggles off instead of
+    // starting a second recognition task (which would fight for the mic).
+    isRecording = true
+    recognitionTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer { isRecording = false }
+      let status = await speechRecognizer.requestAuthorization()
+      guard status == .authorized else {
+        presentedAlert = .speechRecognitionPermissionDenied
+        return
+      }
+      do {
+        let stream = try await speechRecognizer.start(direction.speechRecognitionLocaleIdentifier)
+        for try await result in stream {
+          inputText = result.transcript  // drives auto-translate via didSet
+        }
+      } catch is CancellationError {
+      } catch {
+        presentedAlert = .speechRecognitionFailed
+      }
+      await speechRecognizer.stop()
+    }
+  }
 
   // MARK: - View Helpers
   var inputLabel: String { direction.inputLabel }
@@ -145,11 +178,11 @@ struct TranslatePage: View {
           .foregroundStyle(.secondary)
         Spacer()
         Button(action: model.micButtonTapped) {
-          Image(systemName: "mic.fill")
+          Image(systemName: model.isRecording ? "stop.fill" : "mic.fill")
             .font(.title2)
             .foregroundStyle(.white)
             .frame(width: 56, height: 56)
-            .background(Circle().fill(pageBlue))
+            .background(Circle().fill(model.isRecording ? deepBlue : pageBlue))
         }
       }
     }

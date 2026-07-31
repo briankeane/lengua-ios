@@ -243,3 +243,86 @@ struct TranslatePageModelTests {
     expectNoDifference(model.presentedAlert, .speechSynthesisFailed)
   }
 }
+
+@MainActor
+struct TranslatePageModelDictationTests {
+  @Test func micDictationFlowsIntoInputText() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { text, _ in "translated:\(text)" }
+      $0.speechRecognizer.requestAuthorization = { .authorized }
+      $0.speechRecognizer.stop = {}
+      $0.speechRecognizer.start = { locale in
+        expectNoDifference(locale, "en-US")
+        return AsyncThrowingStream { continuation in
+          continuation.yield(SpeechRecognitionResult(transcript: "Hello", isFinal: false))
+          continuation.yield(SpeechRecognitionResult(transcript: "Hello world", isFinal: true))
+          continuation.finish()
+        }
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.micButtonTapped()
+    await model.recognitionTask?.value
+    expectNoDifference(model.inputText, "Hello world")
+    #expect(model.isRecording == false)
+  }
+
+  @Test func micPermissionDeniedSurfacesAlert() async {
+    let model = withDependencies {
+      $0.speechRecognizer.requestAuthorization = { .denied }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.micButtonTapped()
+    await model.recognitionTask?.value
+    expectNoDifference(model.presentedAlert, .speechRecognitionPermissionDenied)
+    #expect(model.isRecording == false)
+  }
+
+  @Test func micFailureSurfacesAlert() async {
+    let model = withDependencies {
+      $0.speechRecognizer.requestAuthorization = { .authorized }
+      $0.speechRecognizer.stop = {}
+      $0.speechRecognizer.start = { _ in
+        AsyncThrowingStream { $0.finish(throwing: TranslatorError.notReady) }
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.micButtonTapped()
+    await model.recognitionTask?.value
+    expectNoDifference(model.presentedAlert, .speechRecognitionFailed)
+    #expect(model.isRecording == false)
+  }
+
+  @Test func secondMicTapStopsDictation() async {
+    let stopped = LockIsolated(false)
+    let model = withDependencies {
+      $0.speechRecognizer.requestAuthorization = { .authorized }
+      $0.speechRecognizer.stop = { stopped.setValue(true) }
+      $0.speechRecognizer.start = { _ in
+        // A stream that stays open until the recognition task is cancelled,
+        // standing in for a live dictation session.
+        AsyncThrowingStream { continuation in
+          continuation.onTermination = { _ in continuation.finish() }
+        }
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.micButtonTapped()
+    #expect(model.isRecording == true)  // set synchronously on the first tap
+
+    model.micButtonTapped()  // second tap cancels the open recognition stream
+    await model.recognitionTask?.value
+    #expect(model.isRecording == false)
+    #expect(stopped.value == true)
+  }
+}
