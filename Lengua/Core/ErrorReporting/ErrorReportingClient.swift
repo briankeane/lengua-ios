@@ -37,7 +37,7 @@ extension ErrorReportingClient: DependencyKey {
         // Sentry's capture path touches UIApplication.applicationState, which must
         // run on the main thread; these closures are awaited off the main actor.
         await MainActor.run {
-          SentrySDK.capture(error: error) { scope in
+          _ = SentrySDK.capture(error: error) { scope in
             for (key, value) in tags { scope.setTag(value: value, key: key) }
           }
         }
@@ -46,7 +46,7 @@ extension ErrorReportingClient: DependencyKey {
     reportErrorWithContext: { error, tags, contextKey, context in
       #if canImport(Sentry)
         await MainActor.run {
-          SentrySDK.capture(error: error) { scope in
+          _ = SentrySDK.capture(error: error) { scope in
             for (key, value) in tags { scope.setTag(value: value, key: key) }
             if !context.isEmpty { scope.setContext(value: context, key: contextKey) }
           }
@@ -56,7 +56,7 @@ extension ErrorReportingClient: DependencyKey {
     reportMessage: { message, tags in
       #if canImport(Sentry)
         await MainActor.run {
-          SentrySDK.capture(message: message) { scope in
+          _ = SentrySDK.capture(message: message) { scope in
             for (key, value) in tags { scope.setTag(value: value, key: key) }
           }
         }
