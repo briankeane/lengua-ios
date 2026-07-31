@@ -21,6 +21,7 @@ final class SignInPageModel: ViewModel {
 
   // MARK: - Properties
   var presentedAlert: LenguaAlert?
+  var isSigningIn = false
   let isAppleSignInEnabled = false
 
   var titleText: String { "Lengua" }
@@ -36,6 +37,12 @@ final class SignInPageModel: ViewModel {
   // MARK: - User Actions
 
   func signInWithGoogleButtonTapped() async {
+    // Ignore taps while a sign-in is already in flight to avoid overlapping
+    // SDK presentations and duplicate server exchanges.
+    guard !isSigningIn else { return }
+    isSigningIn = true
+    defer { isSigningIn = false }
+
     await analytics.track(.signInStarted(method: .google))
     guard let presentingVC = keyWindowProvider() else {
       presentedAlert = .signInError
@@ -122,6 +129,8 @@ struct SignInPage: View {
           ) {
             Task { await model.signInWithGoogleButtonTapped() }
           }
+          .disabled(model.isSigningIn)
+          .opacity(model.isSigningIn ? 0.5 : 1)
 
           WhiteSignInButton(
             iconImageName: nil,

@@ -170,14 +170,14 @@ struct SignInErrorReport {
   private static func redactedResponseBody(_ responseBody: String) -> String {
     guard let data = responseBody.data(using: .utf8),
       let json = try? JSONSerialization.jsonObject(with: data)
-    else { return responseBody }
+    else { return "[REDACTED NON-JSON RESPONSE]" }
 
     let redacted = redactSensitiveValues(in: json)
     guard JSONSerialization.isValidJSONObject(redacted),
       let redactedData = try? JSONSerialization.data(
         withJSONObject: redacted, options: [.sortedKeys]),
       let redactedString = String(data: redactedData, encoding: .utf8)
-    else { return responseBody }
+    else { return "[REDACTED RESPONSE]" }
     return redactedString
   }
 

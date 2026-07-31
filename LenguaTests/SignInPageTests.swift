@@ -42,6 +42,23 @@ struct SignInPageTests {
       })
   }
 
+  @Test func signInWithGoogleIgnoredWhileAlreadySigningIn() async {
+    @Shared(.auth) var auth = Auth()
+    let capturedEvents = LockIsolated<[AnalyticsEvent]>([])
+
+    let model = withDependencies {
+      $0.analytics.track = { event in capturedEvents.withValue { $0.append(event) } }
+    } operation: {
+      SignInPageModel()
+    }
+    model.isSigningIn = true
+
+    await model.signInWithGoogleButtonTapped()
+
+    // The re-entrancy guard returns before any work (no signInStarted tracked).
+    #expect(capturedEvents.value.isEmpty)
+  }
+
   @Test func signInWithGooglePresentsAlertWhenNoKeyWindow() async {
     @Shared(.auth) var auth = Auth()
     let reportedMessages = LockIsolated<[String]>([])
