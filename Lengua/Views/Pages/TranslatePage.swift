@@ -56,6 +56,8 @@ final class TranslatePageModel: ViewModel {
     }
   }
   var outputPlaceholder: String { direction.outputLabel }
+  var outputIsPlaceholder: Bool { outputText.isEmpty }
+  var outputDisplayText: String { outputText.isEmpty ? outputPlaceholder : outputText }
   var speakItHint: String { "Speak it" }
 
   // MARK: - Private Helpers
@@ -154,9 +156,9 @@ struct TranslatePage: View {
         .font(.subheadline).fontWeight(.semibold)
         .textCase(.uppercase)
         .foregroundStyle(deepBlue)
-      Text(model.outputText.isEmpty ? model.outputPlaceholder : model.outputText)
+      Text(model.outputDisplayText)
         .font(.largeTitle).fontWeight(.semibold)
-        .foregroundStyle(model.outputText.isEmpty ? deepBlue.opacity(0.45) : deepBlue)
+        .foregroundStyle(model.outputIsPlaceholder ? deepBlue.opacity(0.45) : deepBlue)
       Spacer(minLength: 24)
       HStack(alignment: .bottom) {
         Spacer()

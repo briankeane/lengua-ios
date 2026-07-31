@@ -2,7 +2,8 @@ import Dependencies
 import DependenciesMacros
 import Foundation
 
-/// Shared service that translates English into Spanish.
+/// Shared service that translates text between English and Spanish in a
+/// given `TranslationDirection`.
 ///
 /// Call sites only ever touch this client (`@Dependency(\.translator)`); the
 /// underlying provider (Apple on-device now, DeepL later) is an implementation
@@ -28,7 +29,7 @@ enum TranslatorError: Error, Equatable {
   case notReady
   /// The language model must be downloaded before translating.
   case downloadRequired
-  /// The English → Spanish pair is not supported on this device.
+  /// The requested language pair is not supported on this device.
   case unsupportedLanguagePair
   /// The selected provider has not been implemented (e.g. the DeepL stub).
   case notImplemented
@@ -36,7 +37,7 @@ enum TranslatorError: Error, Equatable {
   case translationFailed(String)
 }
 
-/// Readiness of the active provider for the English → Spanish pair.
+/// Readiness of the active provider for the requested language pair.
 enum TranslatorAvailability: Equatable, Sendable {
   /// Ready to translate immediately.
   case installed

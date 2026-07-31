@@ -187,6 +187,26 @@ struct TranslatePageModelTests {
     #expect(called.value == false)
   }
 
+  @Test func outputDisplayFallsBackToPlaceholderUntilTranslated() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "Hola" }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    #expect(model.outputIsPlaceholder == true)
+    expectNoDifference(model.outputDisplayText, model.outputPlaceholder)
+
+    model.inputText = "Hello"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    #expect(model.outputIsPlaceholder == false)
+    expectNoDifference(model.outputDisplayText, model.outputText)
+  }
+
   @Test func speakerErrorSurfacesAlert() async {
     let clock = TestClock()
     let model = withDependencies {
