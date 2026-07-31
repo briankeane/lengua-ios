@@ -5,9 +5,15 @@ on:
   push:
     branches: [main, develop]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
     runs-on: macos-15
+    env:
+      DERIVED_DATA: ${{ github.workspace }}/DerivedData
     steps:
       - uses: actions/checkout@v4
 
@@ -19,6 +25,14 @@ jobs:
 
       - name: Generate project
         run: xcodegen generate
+
+      - name: Cache SPM packages & build products
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DERIVED_DATA }}
+          key: derived-xcode16.4-${{ hashFiles('project.yml') }}
+          restore-keys: |
+            derived-xcode16.4-
 
       - name: Lint
         run: swiftlint --strict
@@ -37,4 +51,6 @@ jobs:
           xcodebuild test \
             -project Lengua.xcodeproj -scheme Lengua \
             -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.device }}" \
-            -skipMacroValidation CODE_SIGNING_ALLOWED=NO
+            -derivedDataPath "$DERIVED_DATA" \
+            -skipMacroValidation -skipPackagePluginValidation \
+            ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO
