@@ -104,6 +104,40 @@ struct TranslatePageModelTests {
     expectNoDifference(model.outputText, "en:es:Hello")
   }
 
+  @Test func swapDuringInFlightTranslationDiscardsStaleResult() async {
+    let clock = TestClock()
+    let (started, startedContinuation) = AsyncStream<Void>.makeStream()
+    let (resume, resumeContinuation) = AsyncStream<String>.makeStream()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in
+        startedContinuation.yield()
+        var iterator = resume.makeAsyncIterator()
+        return await iterator.next() ?? ""
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "Hello"
+    await clock.advance(by: .milliseconds(500))
+    let staleTask = model.translationTask
+    var startedIterator = started.makeAsyncIterator()
+    await startedIterator.next()  // the stale translate call is now in flight
+
+    model.swapButtonTapped()
+    expectNoDifference(model.direction, .spanishToEnglish)
+    expectNoDifference(model.outputText, "Hello")  // swapped text shown immediately
+
+    resumeContinuation.yield("StaleHola")
+    resumeContinuation.finish()
+    await staleTask?.value  // the stale task resolves, but must not clobber state
+
+    expectNoDifference(model.outputText, "Hello")
+    #expect(model.presentedAlert == nil)
+    #expect(model.isTranslating == false)
+  }
+
   @Test func translationErrorSurfacesAlert() async {
     let clock = TestClock()
     let model = withDependencies {
