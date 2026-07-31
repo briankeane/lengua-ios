@@ -213,7 +213,23 @@ final class AppleTranslationBroker {
       guard let request = requests[id] else { continue }  // already cancelled
       do {
         let response = try await session.translate(request.text)
-        finish(id, .success(response.targetText))
+        // Verify the session actually translated the requested direction before
+        // delivering the result. A vended session reports nil identifying
+        // languages, so `drainPair` can only fall back to `activePair`; if a
+        // session for one direction is delivered after `activePair` advanced to
+        // the other, this loop could otherwise drain a request through the wrong
+        // session. The `Response` DOES carry non-nil source/target languages, so
+        // we check them here. On a mismatch we re-queue the request (rather than
+        // return wrong-direction text) and stop; `rearmIfNeeded` then requests a
+        // fresh session for the correct pair.
+        let responsePair = TranslationPair(
+          source: response.sourceLanguage, target: response.targetLanguage)
+        if responsePair.matches(request.pair) {
+          finish(id, .success(response.targetText))
+        } else {
+          queue.insert(id, at: 0)
+          break
+        }
       } catch {
         finish(id, .failure(TranslatorError.translationFailed(String(describing: error))))
       }

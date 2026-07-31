@@ -19,6 +19,13 @@ extension SpeechSynthesizerClient: DependencyKey {
 private final class SpeechSynthesisEngine: NSObject, AVSpeechSynthesizerDelegate {
   private let synthesizer = AVSpeechSynthesizer()
   private var continuation: CheckedContinuation<Void, Error>?
+  /// The utterance the current `continuation` is waiting on. Delegate callbacks
+  /// carry the utterance they fired for; a callback only resolves the
+  /// continuation when its utterance is still the current one. Without this,
+  /// tapping speak again mid-playback (which stops the first utterance) lets the
+  /// first utterance's later `didCancel` prematurely resolve the *second*
+  /// operation.
+  private var currentUtterance: AVSpeechUtterance?
 
   override init() {
     super.init()
@@ -33,6 +40,7 @@ private final class SpeechSynthesisEngine: NSObject, AVSpeechSynthesizerDelegate
     utterance.voice = AVSpeechSynthesisVoice(language: languageIdentifier)
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
       self.continuation = continuation
+      self.currentUtterance = utterance
       synthesizer.speak(utterance)
     }
   }
@@ -56,21 +64,29 @@ private final class SpeechSynthesisEngine: NSObject, AVSpeechSynthesizerDelegate
   }
 
   private func resume(with result: Result<Void, Error>) {
+    currentUtterance = nil
     guard let continuation else { return }
     self.continuation = nil
     continuation.resume(with: result)
   }
 
+  /// Resolves the pending continuation only if `utterance` is the one it is
+  /// waiting on — a stale callback from a superseded utterance is ignored.
+  private func resumeIfCurrent(_ utterance: AVSpeechUtterance) {
+    guard utterance === currentUtterance else { return }
+    resume(with: .success(()))
+  }
+
   nonisolated func speechSynthesizer(
     _ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance
   ) {
-    Task { @MainActor in resume(with: .success(())) }
+    Task { @MainActor in resumeIfCurrent(utterance) }
   }
 
   nonisolated func speechSynthesizer(
     _ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance
   ) {
-    Task { @MainActor in resume(with: .success(())) }
+    Task { @MainActor in resumeIfCurrent(utterance) }
   }
 }
 

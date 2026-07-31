@@ -138,6 +138,24 @@ struct TranslatePageModelTests {
     #expect(model.isTranslating == false)
   }
 
+  @Test func pageDisappearingCancelsInFlightTranslationSoNoStaleAlert() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in throw TranslatorError.notReady }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "Hello"  // schedules a translation; task is debouncing
+    model.pageDisappeared()  // leaving the page cancels it mid-debounce
+    await model.translationTask?.value
+
+    // The cancelled task must not run the failing translate or set an alert.
+    #expect(model.presentedAlert == nil)
+    expectNoDifference(model.outputText, "")
+  }
+
   @Test func translationErrorSurfacesAlert() async {
     let clock = TestClock()
     let model = withDependencies {

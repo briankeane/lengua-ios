@@ -36,6 +36,13 @@ final class TranslatePageModel: ViewModel {
     outputText = previousInput  // show the swapped text immediately
   }
 
+  func pageDisappeared() {
+    // Cancel any in-flight/debouncing translation so a request that fails while
+    // the user is on another tab can't set `presentedAlert` and surface a stale
+    // "Translation Failed" alert when they return.
+    translationTask?.cancel()
+  }
+
   func speakerButtonTapped() async {
     guard !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
     do {
@@ -120,6 +127,7 @@ struct TranslatePage: View {
     }
     .background(pageBlue.ignoresSafeArea())
     .lenguaAlert($model.presentedAlert)
+    .onDisappear { model.pageDisappeared() }
   }
 
   private var inputCard: some View {
