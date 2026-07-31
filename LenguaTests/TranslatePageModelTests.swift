@@ -398,3 +398,85 @@ struct TranslatePageModelDictationTests {
     #expect(model.isRecording == false)
   }
 }
+
+@MainActor
+struct TranslatePageModelCancellationTests {
+  private typealias Continuation =
+    AsyncThrowingStream<SpeechRecognitionResult, Error>.Continuation
+
+  @Test func lateTranscriptAfterPageDisappearedIsIgnored() async {
+    let clock = TestClock()
+    let translateCalls = LockIsolated(0)
+    let box = LockIsolated<Continuation?>(nil)
+    let (streaming, streamingContinuation) = AsyncStream<Void>.makeStream()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { text, _ in
+        translateCalls.withValue { $0 += 1 }
+        return "t:\(text)"
+      }
+      $0.speechRecognizer.requestAuthorization = { .authorized }
+      $0.speechRecognizer.stop = {}
+      $0.speechSynthesizer.stop = {}
+      $0.speechRecognizer.start = { _ in
+        AsyncThrowingStream { continuation in
+          box.setValue(continuation)
+          streamingContinuation.yield()
+          streamingContinuation.finish()
+          continuation.onTermination = { _ in continuation.finish() }
+        }
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.micButtonTapped()
+    var iterator = streaming.makeAsyncIterator()
+    await iterator.next()  // dictation is live
+    model.pageDisappeared()  // cancels dictation
+    await model.recognitionTask?.value
+
+    // A transcript that arrives after cancellation must not write input or restart
+    // translation.
+    box.value?.yield(SpeechRecognitionResult(transcript: "late", isFinal: true))
+    box.value?.finish()
+
+    expectNoDifference(model.inputText, "")
+    expectNoDifference(translateCalls.value, 0)
+  }
+
+  @Test func lateTranscriptAfterSwapDoesNotOverwriteInput() async {
+    let clock = TestClock()
+    let box = LockIsolated<Continuation?>(nil)
+    let (streaming, streamingContinuation) = AsyncStream<Void>.makeStream()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { text, _ in "t:\(text)" }
+      $0.speechRecognizer.requestAuthorization = { .authorized }
+      $0.speechRecognizer.stop = {}
+      $0.speechSynthesizer.stop = {}
+      $0.speechRecognizer.start = { _ in
+        AsyncThrowingStream { continuation in
+          box.setValue(continuation)
+          streamingContinuation.yield()
+          streamingContinuation.finish()
+          continuation.onTermination = { _ in continuation.finish() }
+        }
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.micButtonTapped()
+    var iterator = streaming.makeAsyncIterator()
+    await iterator.next()  // dictation is live
+    model.swapButtonTapped()  // cancels dictation and flips direction
+    await model.recognitionTask?.value
+
+    box.value?.yield(SpeechRecognitionResult(transcript: "late", isFinal: true))
+    box.value?.finish()
+
+    expectNoDifference(model.inputText, "")
+    expectNoDifference(model.direction, .spanishToEnglish)
+  }
+}
