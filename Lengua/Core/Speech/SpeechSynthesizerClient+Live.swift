@@ -67,9 +67,14 @@ private final class SpeechSynthesisEngine: NSObject, AVSpeechSynthesizerDelegate
     currentUtterance = nil
     guard let continuation else { return }
     self.continuation = nil
-    // Release the playback session so speech-to-text (which uses `.record`) and
-    // other apps can take back audio, and ducked audio can resume.
-    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    // Release the playback session so other apps can take back audio and ducked
+    // audio can resume — but only if we still own it. If speech-to-text has since
+    // taken the session over with `.record`, deactivating here would tear the
+    // recognizer's session out from under it, so leave it alone.
+    let session = AVAudioSession.sharedInstance()
+    if session.category == .playback {
+      try? session.setActive(false, options: .notifyOthersOnDeactivation)
+    }
     continuation.resume(with: result)
   }
 

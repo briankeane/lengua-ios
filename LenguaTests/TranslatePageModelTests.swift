@@ -303,13 +303,17 @@ struct TranslatePageModelDictationTests {
 
   @Test func secondMicTapStopsDictation() async {
     let stopped = LockIsolated(false)
+    let (streaming, streamingContinuation) = AsyncStream<Void>.makeStream()
     let model = withDependencies {
       $0.speechRecognizer.requestAuthorization = { .authorized }
       $0.speechRecognizer.stop = { stopped.setValue(true) }
       $0.speechRecognizer.start = { _ in
         // A stream that stays open until the recognition task is cancelled,
-        // standing in for a live dictation session.
+        // standing in for a live dictation session. Signal once it is live so the
+        // test cancels an actually-streaming session, not one still authorizing.
         AsyncThrowingStream { continuation in
+          streamingContinuation.yield()
+          streamingContinuation.finish()
           continuation.onTermination = { _ in continuation.finish() }
         }
       }
@@ -318,11 +322,42 @@ struct TranslatePageModelDictationTests {
     }
 
     model.micButtonTapped()
-    #expect(model.isRecording == true)  // set synchronously on the first tap
+    var iterator = streaming.makeAsyncIterator()
+    await iterator.next()  // dictation is now past authorization and streaming
+    #expect(model.isRecording == true)
 
-    model.micButtonTapped()  // second tap cancels the open recognition stream
+    model.micButtonTapped()  // second tap cancels the active recognition stream
     await model.recognitionTask?.value
     #expect(model.isRecording == false)
     #expect(stopped.value == true)
+  }
+
+  @Test func cancellingDuringAuthorizationDoesNotStartRecording() async {
+    let started = LockIsolated(false)
+    let (gate, gateContinuation) = AsyncStream<Void>.makeStream()
+    let model = withDependencies {
+      $0.speechRecognizer.requestAuthorization = {
+        var iterator = gate.makeAsyncIterator()
+        await iterator.next()  // suspend until the test releases the gate
+        return .authorized
+      }
+      $0.speechRecognizer.start = { _ in
+        started.setValue(true)
+        return AsyncThrowingStream { $0.finish() }
+      }
+      $0.speechRecognizer.stop = {}
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.micButtonTapped()  // task suspends awaiting authorization
+    #expect(model.isRecording == true)
+    model.micButtonTapped()  // second tap cancels the task mid-authorization
+    gateContinuation.yield()  // authorization now resolves to .authorized
+    gateContinuation.finish()
+    await model.recognitionTask?.value
+
+    #expect(started.value == false)  // cancelled before the recognizer started
+    #expect(model.isRecording == false)
   }
 }

@@ -69,6 +69,10 @@ final class TranslatePageModel: ViewModel {
       guard let self else { return }
       defer { isRecording = false }
       let status = await speechRecognizer.requestAuthorization()
+      // The permission prompt is an async suspension point: if a second tap or
+      // `pageDisappeared()` cancelled us while it was up, bail before turning on
+      // the mic (and before surfacing a denial alert on a page we've left).
+      guard !Task.isCancelled else { return }
       guard status == .authorized else {
         presentedAlert = .speechRecognitionPermissionDenied
         return

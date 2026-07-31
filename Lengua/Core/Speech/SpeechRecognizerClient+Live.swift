@@ -27,9 +27,20 @@ private final class SpeechRecognitionEngine {
   private var request: SFSpeechAudioBufferRecognitionRequest?
   private var task: SFSpeechRecognitionTask?
   private var recognizer: SFSpeechRecognizer?
+  private var tapInstalled = false
 
   func currentAuthorizationStatus() -> SpeechAuthorizationStatus {
-    Self.map(SFSpeechRecognizer.authorizationStatus())
+    let speech = Self.map(SFSpeechRecognizer.authorizationStatus())
+    // Both speech recognition AND microphone permission are required; report the
+    // more restrictive of the two so callers never see `.authorized` when the mic
+    // is actually blocked.
+    guard speech == .authorized else { return speech }
+    switch AVAudioApplication.shared.recordPermission {
+    case .granted: return .authorized
+    case .denied: return .denied
+    case .undetermined: return .notDetermined
+    @unknown default: return .denied
+    }
   }
 
   func requestAuthorization() async -> SpeechAuthorizationStatus {
@@ -67,6 +78,7 @@ private final class SpeechRecognitionEngine {
     inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
       request.append(buffer)
     }
+    tapInstalled = true
     audioEngine.prepare()
     do {
       try audioEngine.start()
@@ -103,7 +115,13 @@ private final class SpeechRecognitionEngine {
   private func stopInternal() {
     if audioEngine.isRunning {
       audioEngine.stop()
+    }
+    // Remove the tap based on whether we installed one, not on `isRunning`: if
+    // `audioEngine.start()` threw after `installTap`, the engine isn't running but
+    // the tap is still attached, and a second `installTap` on bus 0 would crash.
+    if tapInstalled {
       audioEngine.inputNode.removeTap(onBus: 0)
+      tapInstalled = false
     }
     request?.endAudio()
     task?.cancel()
@@ -111,9 +129,12 @@ private final class SpeechRecognitionEngine {
     task = nil
     recognizer = nil
     // Release the record session so text-to-speech (which uses `.playback`) and
-    // other apps can take over. `notifyOthersOnDeactivation` lets ducked audio
-    // resume.
-    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    // other apps can take over — but only if we still own it. Don't deactivate a
+    // session another component has since taken with a different category.
+    let session = AVAudioSession.sharedInstance()
+    if session.category == .record {
+      try? session.setActive(false, options: .notifyOthersOnDeactivation)
+    }
   }
 
   private static func map(_ status: SpeechAuth) -> SpeechAuthorizationStatus {
