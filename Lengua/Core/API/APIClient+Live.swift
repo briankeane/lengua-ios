@@ -20,13 +20,13 @@ extension APIClient: DependencyKey {
         let response = await session.request(url).serializingData().response
         return response.response?.statusCode == 200
       },
-      signInViaGoogle: { idToken in
+      signInViaGoogle: { code in
         let path = "v1/auth/google"
         let url = baseUrl.appendingPathComponent(path)
         let response = await session.request(
           url,
           method: .post,
-          parameters: ["idToken": idToken],
+          parameters: ["code": code],
           encoding: JSONEncoding.default
         ).serializingData().response
 

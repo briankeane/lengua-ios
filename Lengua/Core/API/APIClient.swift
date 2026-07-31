@@ -12,8 +12,8 @@ struct APIClient: Sendable {
   /// Simple server reachability check against the configured base URL.
   var health: @Sendable () async throws -> Bool = { true }
 
-  /// Exchanges a Google ID token for a Lengua session (JWT + user).
-  var signInViaGoogle: @Sendable (_ idToken: String) async throws -> GoogleSignInResult
+  /// Exchanges a Google server auth code for a Lengua session (JWT + user).
+  var signInViaGoogle: @Sendable (_ code: String) async throws -> GoogleSignInResult
 }
 
 struct GoogleSignInResult: Equatable, Sendable {
