@@ -23,8 +23,8 @@ struct TranslationDirectionTests {
 
   @Test func speechIdentifiersFollowSourceAndTarget() {
     #expect(TranslationDirection.englishToSpanish.speechRecognitionLocaleIdentifier == "en-US")
-    #expect(TranslationDirection.englishToSpanish.speechSynthesisLanguageIdentifier == "es-ES")
-    #expect(TranslationDirection.spanishToEnglish.speechRecognitionLocaleIdentifier == "es-ES")
+    #expect(TranslationDirection.englishToSpanish.speechSynthesisLanguageIdentifier == "es-MX")
+    #expect(TranslationDirection.spanishToEnglish.speechRecognitionLocaleIdentifier == "es-MX")
     #expect(TranslationDirection.spanishToEnglish.speechSynthesisLanguageIdentifier == "en-US")
   }
 

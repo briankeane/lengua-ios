@@ -41,17 +41,19 @@ enum TranslationDirection: String, Sendable, Equatable, CaseIterable, Codable {
   }
 
   /// Locale for speech recognition — recognizes the INPUT (source) language.
+  /// Spanish uses Latin American (`es-MX`), not Castilian (`es-ES`).
   var speechRecognitionLocaleIdentifier: String {
     switch self {
     case .englishToSpanish: "en-US"
-    case .spanishToEnglish: "es-ES"
+    case .spanishToEnglish: "es-MX"
     }
   }
 
   /// Language for speech synthesis — speaks the OUTPUT (target) language.
+  /// Spanish uses a Latin American voice (`es-MX`), not Castilian (`es-ES`).
   var speechSynthesisLanguageIdentifier: String {
     switch self {
-    case .englishToSpanish: "es-ES"
+    case .englishToSpanish: "es-MX"
     case .spanishToEnglish: "en-US"
     }
   }

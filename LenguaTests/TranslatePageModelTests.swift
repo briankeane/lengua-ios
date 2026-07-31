@@ -172,7 +172,7 @@ struct TranslatePageModelTests {
 
     await model.speakerButtonTapped()
     expectNoDifference(spoken.value?.0, "Hola")
-    expectNoDifference(spoken.value?.1, "es-ES")  // target of englishToSpanish
+    expectNoDifference(spoken.value?.1, "es-MX")  // Latin American Spanish output
   }
 
   @Test func speakerDoesNothingWhenOutputEmpty() async {
