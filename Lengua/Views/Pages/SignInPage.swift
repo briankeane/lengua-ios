@@ -46,15 +46,16 @@ final class SignInPageModel: ViewModel {
     }
     do {
       let signInResult = try await GIDSignIn.sharedInstance.signIn(withPresenting: presentingVC)
-      guard let serverAuthCode = signInResult.serverAuthCode else {
+      _ = try await signInResult.user.refreshTokensIfNeeded()
+      guard let idToken = signInResult.user.idToken?.tokenString else {
         presentedAlert = .signInError
         await errorReporting.reportMessage(
-          "Google sign-in missing serverAuthCode",
-          ["auth_method": "google", "sign_in_step": "server_auth_code"])
+          "Google sign-in missing idToken",
+          ["auth_method": "google", "sign_in_step": "id_token"])
         return
       }
       let userId = signInResult.user.userID ?? "unknown"
-      let result = try await api.signInViaGoogle(serverAuthCode)
+      let result = try await api.signInViaGoogle(idToken)
       $auth.withLock { $0 = Auth(jwtToken: result.token, currentUser: result.user) }
       await analytics.track(.signInCompleted(method: .google, userId: userId))
     } catch {
