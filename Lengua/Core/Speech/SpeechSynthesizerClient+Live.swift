@@ -67,6 +67,9 @@ private final class SpeechSynthesisEngine: NSObject, AVSpeechSynthesizerDelegate
     currentUtterance = nil
     guard let continuation else { return }
     self.continuation = nil
+    // Release the playback session so speech-to-text (which uses `.record`) and
+    // other apps can take back audio, and ducked audio can resume.
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     continuation.resume(with: result)
   }
 
