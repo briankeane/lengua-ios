@@ -10,15 +10,15 @@ import Foundation
 /// changes. See `TranslationProvider` for the provider seam.
 @DependencyClient
 struct TranslatorClient: Sendable {
-  /// Translates English `text` into Spanish. Empty / whitespace-only input
+  /// Translates `text` in the given `direction`. Empty / whitespace-only input
   /// resolves to an empty string without invoking a provider.
-  var translate: @Sendable (_ englishText: String) async throws -> String
+  var translate:
+    @Sendable (_ text: String, _ direction: TranslationDirection) async throws -> String
 
-  /// Whether the active provider can translate English → Spanish right now,
-  /// or needs a model download, or does not support the pair. Safe to call
-  /// before `translate` to drive UI (e.g. prompt a download) rather than
-  /// surfacing a first-call failure.
-  var availability: @Sendable () async -> TranslatorAvailability = { .unknown }
+  /// Whether the active provider can translate `direction` right now, needs a
+  /// model download, or does not support the pair.
+  var availability: @Sendable (_ direction: TranslationDirection) async -> TranslatorAvailability =
+    { _ in .unknown }
 }
 
 /// Domain error for translation. Named `TranslatorError` (not `TranslationError`)
