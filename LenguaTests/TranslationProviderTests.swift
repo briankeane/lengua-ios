@@ -78,4 +78,36 @@ struct TranslationProviderTests {
       try await task.value
     }
   }
+
+  @Test func brokerRebuildsConfigurationWhenPairChanges() async {
+    // Enqueue en→es, then es→en; the second must produce a configuration for the
+    // new pair rather than reusing the first. `TranslationSession.Configuration`
+    // exposes readable `source`/`target` on this SDK (confirmed via the
+    // Translation.swiftinterface), so we observe the configuration flips to the
+    // new source/target directly. Requests are left suspended (no real session
+    // in tests) and released when the host unmounts.
+    let english = Locale.Language(identifier: "en")
+    let spanish = Locale.Language(identifier: "es")
+    let broker = AppleTranslationBroker()
+    broker.hostDidMount()
+
+    let first = Task { @MainActor in
+      try await broker.translate("Hello", from: english, to: spanish)
+    }
+    await Task.yield()
+    let firstConfig = broker.configuration
+    #expect(firstConfig?.source == english)
+    #expect(firstConfig?.target == spanish)
+
+    let second = Task { @MainActor in
+      try await broker.translate("Hola", from: spanish, to: english)
+    }
+    await Task.yield()
+    #expect(broker.configuration?.source == spanish)
+    #expect(broker.configuration?.target == english)
+
+    broker.hostDidUnmount()  // releases both waiters with .notReady
+    _ = await first.result
+    _ = await second.result
+  }
 }
