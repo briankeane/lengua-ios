@@ -26,3 +26,9 @@ extension SharedKey where Self == InMemoryKey<AppVersionRequirements?>.Default {
     Self[.inMemory("appVersionRequirements"), default: nil]
   }
 }
+
+extension SharedKey where Self == AppStorageKey<TranslationProviderKind>.Default {
+  static var translationProviderKind: Self {
+    Self[.appStorage("translationProviderKind"), default: .apple]
+  }
+}

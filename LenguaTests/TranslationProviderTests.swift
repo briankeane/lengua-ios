@@ -1,4 +1,5 @@
 import Foundation
+import Sharing
 import Testing
 
 @testable import Lengua
@@ -11,6 +12,18 @@ struct TranslationProviderTests {
 
   @Test func defaultProviderIsApple() {
     #expect(TranslationProviderSelector.current == .apple)
+  }
+
+  @Test func selectorFollowsPersistedPreference() {
+    @Shared(.translationProviderKind) var kind = .deepL
+    #expect(TranslationProviderSelector.current == .deepL)
+    $kind.withLock { $0 = .apple }
+    #expect(TranslationProviderSelector.current == .apple)
+  }
+
+  @Test func deepLIsDisabledAppleIsEnabled() {
+    #expect(TranslationProviderKind.apple.isEnabled == true)
+    #expect(TranslationProviderKind.deepL.isEnabled == false)
   }
 
   @Test func selectorReturnsAppleProviderForApple() {

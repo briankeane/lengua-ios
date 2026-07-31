@@ -1,4 +1,5 @@
 import Foundation
+import Sharing
 import SwiftUI
 import Translation
 
@@ -306,8 +307,10 @@ struct AppleTranslationHost: View {
 /// session host; cloud providers (DeepL) need none, so this gates on the active
 /// provider and app composition stays provider-agnostic.
 struct TranslatorHost: View {
+  @Shared(.translationProviderKind) var providerKind
+
   var body: some View {
-    if TranslationProviderSelector.current == .apple {
+    if providerKind == .apple {
       AppleTranslationHost()
     }
   }
