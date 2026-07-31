@@ -34,6 +34,32 @@ struct TranslationProviderTests {
     }
   }
 
+  // MARK: - drainPair (regression: no translation shown / no download prompt)
+
+  @Test func drainPairFallsBackToActivePairWhenSessionLanguagesAreNil() {
+    // A `.translationTask`-vended session reports nil source/target languages.
+    // The broken version required them and returned early — so the drain never
+    // called prepareTranslation() (no model-download prompt) and never
+    // translated. drainPair MUST fall back to the configured activePair here.
+    let active = TranslationPair(source: english, target: spanish)
+    let pair = AppleTranslationBroker.drainPair(
+      sessionSource: nil, sessionTarget: nil, activePair: active)
+    #expect(pair == active)
+  }
+
+  @Test func drainPairPrefersSessionLanguagesWhenPresent() {
+    let pair = AppleTranslationBroker.drainPair(
+      sessionSource: spanish, sessionTarget: english,
+      activePair: TranslationPair(source: english, target: spanish))
+    #expect(pair == TranslationPair(source: spanish, target: english))
+  }
+
+  @Test func drainPairIsNilWhenNoSessionLanguagesAndNoActivePair() {
+    let pair = AppleTranslationBroker.drainPair(
+      sessionSource: nil, sessionTarget: nil, activePair: nil)
+    #expect(pair == nil)
+  }
+
   @Test func defaultProviderIsApple() {
     withInMemoryAppStorage {
       #expect(TranslationProviderSelector.current == .apple)

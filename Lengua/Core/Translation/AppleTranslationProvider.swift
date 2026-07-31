@@ -170,18 +170,17 @@ final class AppleTranslationBroker {
       rearmIfNeeded(afterDraining: drainedPair)
     }
 
-    // Derive the pair from the session itself rather than the broker's
-    // `activePair`. `activePair` is mutable request state: Apple vends a
-    // session asynchronously, so a rapid second direction flip can advance
-    // `activePair` to a different pair before this session (built for the
-    // *previous* pair) is actually delivered here. Reading the pair off the
-    // session Apple handed us is authoritative and closes that race.
-    guard let source = session.sourceLanguage, let target = session.targetLanguage else {
-      // The broker always configures sessions with an explicit source/target,
-      // so this should be unreachable; fail safe rather than misroute.
-      return
-    }
-    let pair = TranslationPair(source: source, target: target)
+    // Determine which pair this session serves. A `.translationTask`-vended
+    // session reports `nil` source/target languages (those are only populated on
+    // sessions constructed via `init(installedSource:target:)`), so we cannot
+    // depend on them — we fall back to `activePair`, the pair the broker
+    // configured this session for. See `drainPair` for the failure this avoids.
+    guard
+      let pair = Self.drainPair(
+        sessionSource: session.sourceLanguage,
+        sessionTarget: session.targetLanguage,
+        activePair: activePair)
+    else { return }
     drainedPair = pair
 
     do {
@@ -219,6 +218,31 @@ final class AppleTranslationBroker {
         finish(id, .failure(TranslatorError.translationFailed(String(describing: error))))
       }
     }
+  }
+
+  /// The language pair a delivered session actually serves.
+  ///
+  /// A session vended by SwiftUI's `.translationTask(_:)` reports `nil`
+  /// `sourceLanguage`/`targetLanguage` (those are only populated on sessions
+  /// built with `init(installedSource:target:)`). So prefer the session's own
+  /// languages when present, but fall back to `activePair` — the pair the broker
+  /// configured the session for — when they are `nil`.
+  ///
+  /// Regression guard: a prior version REQUIRED the session's languages and
+  /// returned early when they were `nil`. Because vended sessions always report
+  /// `nil`, that early return ran on every real translation: `prepareTranslation()`
+  /// was never called (no model-download prompt) and no queued request was ever
+  /// drained, so translations silently never appeared. Kept as a pure static
+  /// function so this behaviour is unit-testable without a live `TranslationSession`.
+  static func drainPair(
+    sessionSource: Locale.Language?,
+    sessionTarget: Locale.Language?,
+    activePair: TranslationPair?
+  ) -> TranslationPair? {
+    if let sessionSource, let sessionTarget {
+      return TranslationPair(source: sessionSource, target: sessionTarget)
+    }
+    return activePair
   }
 
   private func requestSessionIfNeeded(for pair: TranslationPair) {
