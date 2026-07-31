@@ -12,11 +12,11 @@ final class Config: Sendable {
 
   var baseUrl: URL {
     switch environment {
-    case .local:
+    case .local, .development, .staging:
+      // TODO: point development/staging at real hosts when they exist.
       return URL(string: "http://localhost:10020")!
-    case .development, .staging, .production:
-      // TODO: point staging/production at real hosts when they exist.
-      return URL(string: "http://localhost:10020")!
+    case .production:
+      return URL(string: "https://api.lengua-app.com")!
     }
   }
 
