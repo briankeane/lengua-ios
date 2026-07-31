@@ -54,4 +54,10 @@ extension LenguaAlert {
         + "off wifi and using cellular data, or switch to a different wifi "
         + "network. (More info: https://support.apple.com/en-us/122756)")
   }
+
+  static var translationFailed: LenguaAlert {
+    LenguaAlert(
+      title: "Translation Failed",
+      message: "We couldn't translate that just now. Check your connection and try again.")
+  }
 }

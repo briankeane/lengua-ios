@@ -1,22 +1,89 @@
+import Dependencies
 import SwiftUI
 
 @MainActor
 @Observable
 final class TranslatePageModel: ViewModel {
-  // MARK: - Properties
-  var englishLabel: String { "English" }
-  var englishPlaceholder: String { "Type or speak English" }
-  var speakItHint: String { "Speak it" }
-  var spanishLabel: String { "Spanish" }
-  var spanishPlaceholder: String { "Spanish" }
+
+  // MARK: - Dependencies
+  @ObservationIgnored @Dependency(\.translator) var translator
+  @ObservationIgnored @Dependency(\.continuousClock) var clock
 
   // MARK: - Initialization
   override init() { super.init() }
 
+  // MARK: - Properties
+  var direction: TranslationDirection = .englishToSpanish
+  var inputText = "" {
+    didSet {
+      guard inputText != oldValue else { return }
+      scheduleTranslation()
+    }
+  }
+  var outputText = ""
+  var isTranslating = false
+  var presentedAlert: LenguaAlert?
+
+  @ObservationIgnored private(set) var translationTask: Task<Void, Never>?
+
   // MARK: - User Actions
-  func micButtonTapped() {}
-  func swapButtonTapped() {}
-  func speakerButtonTapped() {}
+  func swapButtonTapped() {
+    translationTask?.cancel()
+    direction.toggle()
+    let previousInput = inputText
+    inputText = outputText  // didSet schedules a fresh translation
+    outputText = previousInput  // show the swapped text immediately
+  }
+
+  func speakerButtonTapped() async {}  // wired in Stage 4
+  func micButtonTapped() {}  // wired in Stage 5
+
+  // MARK: - View Helpers
+  var inputLabel: String { direction.inputLabel }
+  var outputLabel: String { direction.outputLabel }
+  var inputPlaceholder: String {
+    switch direction {
+    case .englishToSpanish: "Type or speak English"
+    case .spanishToEnglish: "Type or speak Spanish"
+    }
+  }
+  var outputPlaceholder: String { direction.outputLabel }
+  var speakItHint: String { "Speak it" }
+
+  // MARK: - Private Helpers
+  private func scheduleTranslation() {
+    translationTask?.cancel()
+    let text = inputText
+    let currentDirection = direction
+
+    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      outputText = ""
+      isTranslating = false
+      return
+    }
+
+    isTranslating = true
+    translationTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      do {
+        try await clock.sleep(for: .milliseconds(500))
+        try Task.checkCancellation()
+        let translated = try await translator.translate(text, currentDirection)
+        try Task.checkCancellation()
+        // Ignore stale results: a newer edit/swap owns the state now.
+        guard inputText == text, direction == currentDirection else { return }
+        outputText = translated
+        isTranslating = false
+      } catch is CancellationError {
+        // Superseded by a newer schedule, which owns `isTranslating`.
+      } catch {
+        guard inputText == text, direction == currentDirection else { return }
+        outputText = ""
+        isTranslating = false
+        presentedAlert = .translationFailed
+      }
+    }
+  }
 }
 
 struct TranslatePage: View {
@@ -24,35 +91,36 @@ struct TranslatePage: View {
 
   private let pageBlue = Color(red: 0.24, green: 0.29, blue: 0.85)
   private let deepBlue = Color(red: 0.15, green: 0.20, blue: 0.55)
-  private let englishCardColor = Color(red: 0.98, green: 0.98, blue: 0.96)
-  private let spanishCardColor = Color(red: 0.87, green: 0.89, blue: 0.98)
+  private let inputCardColor = Color(red: 0.98, green: 0.98, blue: 0.96)
+  private let outputCardColor = Color(red: 0.87, green: 0.89, blue: 0.98)
 
   var body: some View {
     GeometryReader { proxy in
       ScrollView {
         VStack(spacing: 0) {
-          englishCard
+          inputCard
           swapButton
             .padding(.vertical, -20)
             .zIndex(1)
-          spanishCard
+          outputCard
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, minHeight: proxy.size.height)
       }
     }
     .background(pageBlue.ignoresSafeArea())
+    .lenguaAlert($model.presentedAlert)
   }
 
-  private var englishCard: some View {
+  private var inputCard: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text(model.englishLabel)
+      Text(model.inputLabel)
         .font(.subheadline).fontWeight(.semibold)
         .textCase(.uppercase)
         .foregroundStyle(.secondary)
-      Text(model.englishPlaceholder)
+      TextField(model.inputPlaceholder, text: $model.inputText, axis: .vertical)
         .font(.largeTitle)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.primary)
       Spacer(minLength: 24)
       HStack(alignment: .bottom) {
         Text(model.speakItHint)
@@ -69,22 +137,24 @@ struct TranslatePage: View {
     }
     .padding(20)
     .frame(maxWidth: .infinity, minHeight: 300, alignment: .topLeading)
-    .background(RoundedRectangle(cornerRadius: 20).fill(englishCardColor))
+    .background(RoundedRectangle(cornerRadius: 20).fill(inputCardColor))
   }
 
-  private var spanishCard: some View {
+  private var outputCard: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text(model.spanishLabel)
+      Text(model.outputLabel)
         .font(.subheadline).fontWeight(.semibold)
         .textCase(.uppercase)
         .foregroundStyle(deepBlue)
-      Text(model.spanishPlaceholder)
+      Text(model.outputText.isEmpty ? model.outputPlaceholder : model.outputText)
         .font(.largeTitle).fontWeight(.semibold)
-        .foregroundStyle(deepBlue.opacity(0.45))
+        .foregroundStyle(model.outputText.isEmpty ? deepBlue.opacity(0.45) : deepBlue)
       Spacer(minLength: 24)
       HStack(alignment: .bottom) {
         Spacer()
-        Button(action: model.speakerButtonTapped) {
+        Button {
+          Task { await model.speakerButtonTapped() }
+        } label: {
           Image(systemName: "speaker.wave.2.fill")
             .font(.title2)
             .foregroundStyle(deepBlue)
@@ -95,7 +165,7 @@ struct TranslatePage: View {
     }
     .padding(20)
     .frame(maxWidth: .infinity, minHeight: 260, alignment: .topLeading)
-    .background(RoundedRectangle(cornerRadius: 20).fill(spanishCardColor))
+    .background(RoundedRectangle(cornerRadius: 20).fill(outputCardColor))
   }
 
   private var swapButton: some View {
