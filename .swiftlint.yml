@@ -20,4 +20,5 @@ file_length:
 
 excluded:
   - .build
+  - DerivedData
   - Lengua.xcodeproj
