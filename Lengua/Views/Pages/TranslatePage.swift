@@ -33,6 +33,9 @@ final class TranslatePageModel: ViewModel {
   // MARK: - User Actions
   func swapButtonTapped() {
     translationTask?.cancel()
+    // Stop dictation: it was started for the old direction's locale, so continuing
+    // would feed the wrong language into the newly-flipped direction.
+    recognitionTask?.cancel()
     direction.toggle()
     let previousInput = inputText
     inputText = outputText  // didSet schedules a fresh translation
@@ -46,10 +49,17 @@ final class TranslatePageModel: ViewModel {
     // and record audio session are released when leaving the tab.
     translationTask?.cancel()
     recognitionTask?.cancel()
+    // Stop any in-progress speech so it doesn't keep the playback audio session
+    // active after we've left the tab.
+    Task { await speechSynthesizer.stop() }
   }
 
   func speakerButtonTapped() async {
     guard !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    // Serialize with dictation: stop the recognizer (and let its .record session
+    // tear down) before TTS takes the shared audio session with .playback.
+    recognitionTask?.cancel()
+    await recognitionTask?.value
     do {
       try await speechSynthesizer.speak(outputText, direction.speechSynthesisLanguageIdentifier)
     } catch {
@@ -77,6 +87,10 @@ final class TranslatePageModel: ViewModel {
         presentedAlert = .speechRecognitionPermissionDenied
         return
       }
+      // Serialize with TTS: release its .playback session before we take the mic's
+      // .record session so the two never fight over the shared audio session.
+      await speechSynthesizer.stop()
+      guard !Task.isCancelled else { return }
       do {
         let stream = try await speechRecognizer.start(direction.speechRecognitionLocaleIdentifier)
         for try await result in stream {
@@ -84,6 +98,9 @@ final class TranslatePageModel: ViewModel {
         }
       } catch is CancellationError {
       } catch {
+        // A cancelled recognizer often reports a framework error rather than a
+        // CancellationError; don't surface a failure alert for a deliberate stop.
+        guard !Task.isCancelled else { return }
         presentedAlert = .speechRecognitionFailed
       }
       await speechRecognizer.stop()

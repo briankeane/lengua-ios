@@ -143,6 +143,7 @@ struct TranslatePageModelTests {
     let model = withDependencies {
       $0.continuousClock = clock
       $0.translator.translate = { _, _ in throw TranslatorError.notReady }
+      $0.speechSynthesizer.stop = {}
     } operation: {
       TranslatePageModel()
     }
@@ -253,6 +254,7 @@ struct TranslatePageModelDictationTests {
       $0.translator.translate = { text, _ in "translated:\(text)" }
       $0.speechRecognizer.requestAuthorization = { .authorized }
       $0.speechRecognizer.stop = {}
+      $0.speechSynthesizer.stop = {}
       $0.speechRecognizer.start = { locale in
         expectNoDifference(locale, "en-US")
         return AsyncThrowingStream { continuation in
@@ -288,6 +290,7 @@ struct TranslatePageModelDictationTests {
     let model = withDependencies {
       $0.speechRecognizer.requestAuthorization = { .authorized }
       $0.speechRecognizer.stop = {}
+      $0.speechSynthesizer.stop = {}
       $0.speechRecognizer.start = { _ in
         AsyncThrowingStream { $0.finish(throwing: TranslatorError.notReady) }
       }
@@ -307,6 +310,7 @@ struct TranslatePageModelDictationTests {
     let model = withDependencies {
       $0.speechRecognizer.requestAuthorization = { .authorized }
       $0.speechRecognizer.stop = { stopped.setValue(true) }
+      $0.speechSynthesizer.stop = {}
       $0.speechRecognizer.start = { _ in
         // A stream that stays open until the recognition task is cancelled,
         // standing in for a live dictation session. Signal once it is live so the
@@ -358,6 +362,39 @@ struct TranslatePageModelDictationTests {
     await model.recognitionTask?.value
 
     #expect(started.value == false)  // cancelled before the recognizer started
+    #expect(model.isRecording == false)
+  }
+
+  @Test func speakerStopsActiveDictationBeforeSpeaking() async {
+    let recognizerStopped = LockIsolated(false)
+    let spoke = LockIsolated(false)
+    let (streaming, streamingContinuation) = AsyncStream<Void>.makeStream()
+    let model = withDependencies {
+      $0.speechRecognizer.requestAuthorization = { .authorized }
+      $0.speechRecognizer.stop = { recognizerStopped.setValue(true) }
+      $0.speechSynthesizer.stop = {}
+      $0.speechSynthesizer.speak = { _, _ in spoke.setValue(true) }
+      $0.speechRecognizer.start = { _ in
+        AsyncThrowingStream { continuation in
+          streamingContinuation.yield()
+          streamingContinuation.finish()
+          continuation.onTermination = { _ in continuation.finish() }
+        }
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.micButtonTapped()
+    var iterator = streaming.makeAsyncIterator()
+    await iterator.next()  // dictation is live
+    #expect(model.isRecording == true)
+
+    model.outputText = "Hola"  // give the speaker something to say
+    await model.speakerButtonTapped()
+
+    #expect(recognizerStopped.value == true)  // dictation stopped before TTS spoke
+    #expect(spoke.value == true)
     #expect(model.isRecording == false)
   }
 }

@@ -28,6 +28,10 @@ private final class SpeechRecognitionEngine {
   private var task: SFSpeechRecognitionTask?
   private var recognizer: SFSpeechRecognizer?
   private var tapInstalled = false
+  /// Bumped on every `start`. A stream's `onTermination` captures the generation
+  /// it was created for so a late termination from a superseded session can't tear
+  /// down the session that replaced it.
+  private var generation = 0
 
   func currentAuthorizationStatus() -> SpeechAuthorizationStatus {
     let speech = Self.map(SFSpeechRecognizer.authorizationStatus())
@@ -65,6 +69,9 @@ private final class SpeechRecognitionEngine {
     }
     self.recognizer = recognizer
 
+    generation += 1
+    let currentGeneration = generation
+
     let session = AVAudioSession.sharedInstance()
     try session.setCategory(.record, mode: .measurement, options: .duckOthers)
     try session.setActive(true, options: .notifyOthersOnDeactivation)
@@ -101,7 +108,7 @@ private final class SpeechRecognitionEngine {
         }
       }
       continuation.onTermination = { [weak self] _ in
-        Task { @MainActor in self?.stopInternal() }
+        Task { @MainActor in self?.stopInternal(ifGeneration: currentGeneration) }
       }
     }
   }
@@ -112,7 +119,11 @@ private final class SpeechRecognitionEngine {
   }
 
   @MainActor
-  private func stopInternal() {
+  private func stopInternal(ifGeneration generation: Int? = nil) {
+    // A generation-scoped teardown (from a stream's `onTermination`) is a no-op if
+    // a newer `start` has already taken over; an unscoped call (explicit stop or a
+    // fresh `start`) always tears down.
+    if let generation, generation != self.generation { return }
     if audioEngine.isRunning {
       audioEngine.stop()
     }
