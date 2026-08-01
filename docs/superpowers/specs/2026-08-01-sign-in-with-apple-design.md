@@ -35,9 +35,8 @@ Google port does).
   `/v1/auth/google` response (`GoogleSignInResponse`).
 
 The server team must implement this endpoint to match. This spec does not build
-or modify the server (`~/code/lengua/server`). Two server-side requirements the
-client depends on (flagged by Codex review, out of scope here but noted for the
-server work):
+or modify the server (`~/code/lengua/server`). Three server-side requirements the
+client depends on (out of scope here but noted for the server work):
 
 - The server must key the account on the stable Apple subject (`sub`) inside the
   verified `identityToken`, **not** on email — Apple omits email/name on every
@@ -46,6 +45,12 @@ server work):
   sends `firstName: ""` and no email/lastName), the server must **preserve** the
   previously stored profile fields rather than overwriting them with blanks, and
   must return a complete `User` in the response.
+- **Replay protection is required.** The client sends no cryptographic nonce
+  (Playola-faithful), so the server must not rely on `identityToken` signature
+  validation alone. It must exchange the single-use `authorizationCode` with
+  Apple's token endpoint (recommended — this is why the client forwards
+  `authorizationCode`) or otherwise enforce a per-request nonce round-trip.
+  Signature-only verification of the `identityToken` has no replay defense.
 
 ## Design
 
