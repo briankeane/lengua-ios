@@ -93,12 +93,4 @@ struct LibraryPageModelTests {
     expectNoDifference(model.sortedItems.map(\.id), ["new", "learning", "known"])
   }
 
-  @Test func familiarityLevelClampsToRange() {
-    @Shared(.vocabItems) var vocabItems = VocabItems()
-    let model = LibraryPageModel()
-    expectNoDifference(model.familiarityMaxLevel, 5)
-    expectNoDifference(model.familiarityLevel(for: item(id: "a", familiarity: 3)), 3)
-    expectNoDifference(model.familiarityLevel(for: item(id: "b", familiarity: 9)), 5)
-    expectNoDifference(model.familiarityLevel(for: item(id: "c", familiarity: -1)), 0)
-  }
 }

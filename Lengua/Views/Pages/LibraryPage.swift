@@ -51,12 +51,6 @@ final class LibraryPageModel: ViewModel {
   }
   var showsRetry: Bool { vocabItems.loadFailed && vocabItems.items.isEmpty }
 
-  let familiarityMaxLevel = 5
-
-  func familiarityLevel(for item: VocabItem) -> Int {
-    min(max(item.familiarity, 0), familiarityMaxLevel)
-  }
-
   var sortedItems: [VocabItem] {
     switch sortMode {
     case .date:
@@ -145,8 +139,6 @@ struct LibraryPage: View {
             LibraryRow(
               targetText: item.targetText,
               sourceText: item.sourceText,
-              filledDots: model.familiarityLevel(for: item),
-              totalDots: model.familiarityMaxLevel,
               deepBlue: deepBlue,
               cardColor: cardColor)
           }
@@ -178,12 +170,8 @@ struct LibraryPage: View {
 private struct LibraryRow: View {
   let targetText: String
   let sourceText: String
-  let filledDots: Int
-  let totalDots: Int
   let deepBlue: Color
   let cardColor: Color
-
-  private var dotsColumnWidth: CGFloat { CGFloat(totalDots) * 7 + CGFloat(totalDots - 1) * 3 }
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
@@ -195,18 +183,10 @@ private struct LibraryRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
       Text(sourceText)
-        .font(.subheadline)
-        .foregroundStyle(deepBlue.opacity(0.55))
+        .font(.body)
+        .foregroundStyle(deepBlue.opacity(0.6))
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
-      HStack(spacing: 3) {
-        ForEach(0..<totalDots, id: \.self) { index in
-          Circle()
-            .fill(index < filledDots ? deepBlue : deepBlue.opacity(0.18))
-            .frame(width: 7, height: 7)
-        }
-      }
-      .frame(width: dotsColumnWidth, alignment: .trailing)
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 14)
