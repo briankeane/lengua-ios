@@ -183,17 +183,22 @@ private struct LibraryRow: View {
   let deepBlue: Color
   let cardColor: Color
 
+  private var dotsColumnWidth: CGFloat { CGFloat(totalDots) * 7 + CGFloat(totalDots - 1) * 3 }
+
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(alignment: .top, spacing: 12) {
+      // Target and source share the row evenly so the columns line up across
+      // rows; text wraps (growing the card vertically) instead of truncating.
       Text(targetText)
         .font(.headline)
         .foregroundStyle(deepBlue)
-        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
       Text(sourceText)
         .font(.subheadline)
         .foregroundStyle(deepBlue.opacity(0.55))
-        .lineLimit(1)
-      Spacer(minLength: 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
       HStack(spacing: 3) {
         ForEach(0..<totalDots, id: \.self) { index in
           Circle()
@@ -201,6 +206,7 @@ private struct LibraryRow: View {
             .frame(width: 7, height: 7)
         }
       }
+      .frame(width: dotsColumnWidth, alignment: .trailing)
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 14)
