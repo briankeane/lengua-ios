@@ -37,7 +37,9 @@ extension VocabItemsClient: DependencyKey {
         @Shared(.auth) var auth
         $vocabItems.withLock { state in
           if auth.isLoggedIn {  // a sign-out mid-load must not repopulate
-            state.items = IdentifiedArray(uniqueElements: loaded)
+            // De-dupe rather than trap: keyset pagination can repeat an id
+            // across page boundaries if rows shift mid-fetch. Keep the first.
+            state.items = IdentifiedArray(loaded, id: \.id) { first, _ in first }
           }
           state.isLoading = false
         }

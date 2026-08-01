@@ -40,6 +40,26 @@ struct VocabItemsClientTests {
     }
   }
 
+  @Test func refreshDedupesDuplicateIdsAcrossPages() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, cursor in
+        cursor == nil
+          ? VocabItemsPage(items: [self.item(id: "dup"), self.item(id: "a")], nextCursor: "c2")
+          : VocabItemsPage(items: [self.item(id: "dup")], nextCursor: nil)  // repeated id
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()  // must not trap on the duplicate "dup" id
+
+      expectNoDifference(vocabItems.items.map(\.id).sorted(), ["a", "dup"])
+      expectNoDifference(vocabItems.loadFailed, false)
+    }
+  }
+
   @Test func refreshFailureSetsLoadFailed() async {
     await withDependencies {
       $0.api.getVocabItems = { _, _, _ in throw APIError.dataNotValid }
