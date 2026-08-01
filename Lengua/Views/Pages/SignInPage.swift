@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Dependencies
 @preconcurrency import GoogleSignIn
 import GoogleSignInSwift
@@ -80,6 +81,51 @@ final class SignInPageModel: ViewModel {
   // Apple sign-in is intentionally disabled for now (button rendered, no-op).
   func appleSignInButtonTapped() {}
 
+  func signInWithAppleButtonTapped(request: ASAuthorizationAppleIDRequest) {
+    request.requestedScopes = [.email, .fullName]
+    Task { await analytics.track(.signInStarted(method: .apple)) }
+  }
+
+  func signInWithAppleCompleted(result: Result<ASAuthorization, any Error>) async {
+    switch result {
+    case .success(let authorization):
+      let payload: AppleSignInPayload
+      do {
+        payload = try decodeAppleAuthorization(authorization)
+      } catch {
+        presentedAlert = .signInError
+        await errorReporting.reportMessage(
+          "Error decoding sign-in info from Apple",
+          [
+            "auth_method": "apple",
+            "sign_in_step": "credential_decode",
+            "decode_reason": (error as? AppleCredentialDecodeError)?.rawValue ?? "unknown",
+          ])
+        return
+      }
+      await completeAppleSignIn(payload)
+    case .failure(let error):
+      await handleAppleAuthorizationFailure(error)
+    }
+  }
+
+  func completeAppleSignIn(_ payload: AppleSignInPayload) async {
+    // Only one sign-in at a time across Google and Apple.
+    guard !isSigningIn else { return }
+    isSigningIn = true
+    defer { isSigningIn = false }
+
+    do {
+      let result = try await api.signInViaApple(
+        payload.identityToken, payload.email, payload.authorizationCode,
+        payload.firstName, payload.lastName)
+      $auth.withLock { $0 = Auth(jwtToken: result.token, currentUser: result.user) }
+      await analytics.track(.signInCompleted(method: .apple, userId: payload.appleUserId))
+    } catch {
+      await handleSignInAPIFailure(error, authMethod: .apple, step: "api_call")
+    }
+  }
+
   // MARK: - Internal Helpers
 
   // Internal so tests can drive alert/analytics/reporting routing directly.
@@ -91,6 +137,65 @@ final class SignInPageModel: ViewModel {
     await errorReporting.reportErrorWithContext(
       error, report.tags, report.contextKey, report.context)
   }
+
+  // Thin extraction of the Apple credential. The only piece not unit-tested,
+  // because ASAuthorization / ASAuthorizationAppleIDCredential cannot be
+  // constructed in tests. Throws a specific case so decode failures are
+  // diagnosable in error reports.
+  func decodeAppleAuthorization(_ authorization: ASAuthorization) throws -> AppleSignInPayload {
+    guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+      throw AppleCredentialDecodeError.notAppleIDCredential
+    }
+    guard let identityTokenData = credential.identityToken else {
+      throw AppleCredentialDecodeError.missingIdentityToken
+    }
+    guard let identityToken = String(data: identityTokenData, encoding: .utf8) else {
+      throw AppleCredentialDecodeError.identityTokenNotUTF8
+    }
+    guard let authCodeData = credential.authorizationCode else {
+      throw AppleCredentialDecodeError.missingAuthorizationCode
+    }
+    guard let authorizationCode = String(data: authCodeData, encoding: .utf8) else {
+      throw AppleCredentialDecodeError.authorizationCodeNotUTF8
+    }
+    return AppleSignInPayload(
+      identityToken: identityToken,
+      authorizationCode: authorizationCode,
+      email: credential.email,
+      firstName: credential.fullName?.givenName ?? "",
+      lastName: credential.fullName?.familyName,
+      appleUserId: credential.user)
+  }
+
+  // MARK: - Private Helpers
+
+  private func handleAppleAuthorizationFailure(_ error: any Error) async {
+    // The user tapping "Cancel" on the system sheet is not an error.
+    if let authError = error as? ASAuthorizationError, authError.code == .canceled {
+      return
+    }
+    presentedAlert = .signInError
+    let report = SignInErrorReport(error: error, authMethod: .apple, step: "authorization_failure")
+    await errorReporting.reportErrorWithContext(
+      error, report.tags, report.contextKey, report.context)
+  }
+}
+
+struct AppleSignInPayload: Equatable {
+  let identityToken: String
+  let authorizationCode: String
+  let email: String?
+  let firstName: String
+  let lastName: String?
+  let appleUserId: String
+}
+
+enum AppleCredentialDecodeError: String, Error {
+  case notAppleIDCredential
+  case missingIdentityToken
+  case identityTokenNotUTF8
+  case missingAuthorizationCode
+  case authorizationCodeNotUTF8
 }
 
 struct SignInPage: View {
