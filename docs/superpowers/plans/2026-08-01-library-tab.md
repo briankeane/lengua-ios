@@ -517,10 +517,10 @@ git commit -m "refactor: rename Deck tab to Library placeholder"
 Replace the body of `LenguaTests/LibraryPageModelTests.swift`:
 
 ```swift
+import ConcurrencyExtras
 import CustomDump
 import Dependencies
 import Foundation
-import IdentifiedCollections
 import Testing
 
 @testable import Lengua
@@ -691,7 +691,7 @@ struct LibraryPageModelTests {
 }
 ```
 
-Add `import ConcurrencyExtras` at the top if `LockIsolated` is not already resolved (it lives in ConcurrencyExtras, re-exported by Dependencies — match whatever `TranslatePageModelTests.swift` imports; it uses `import ConcurrencyExtras`).
+`LockIsolated` comes from `ConcurrencyExtras` (linked to the test target as `link: false`), matching `TranslatePageModelTests.swift`. Do **not** `import IdentifiedCollections` here — it is not a test-target dependency; `model.items` is reachable through `@testable import Lengua` and the tests only read it.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -971,4 +971,4 @@ git commit -m "feat: build Library list view with familiarity dots and sort cont
 
 **Type consistency:** `getVocabItems(_ targetLanguageCode:_ limit:_ cursor:)` returns `VocabItemsPage` everywhere; `SortMode` cases `date`/`alphabetical`/`familiarity` consistent across model + tests; `familiarityMaxLevel`/`familiarityLevel(for:)` names match between model and Task 5 view. ✅
 
-**Note for the executor:** Xcode project membership — new files under `Lengua/` and `LenguaTests/` must be added to the `Lengua` and `LenguaTests` targets respectively. If the project uses folder-synced groups they are picked up automatically; otherwise add them in Xcode (or the `.pbxproj`) before `make test`.
+**Note for the executor:** This project uses **XcodeGen** (`project.yml`, targets source whole folders `Lengua` / `LenguaTests`). `make test` runs `xcodegen generate` first, so new files under those folders are picked up automatically — no manual `.pbxproj` / target-membership step. The `.xcodeproj` is gitignored/generated; do not commit it.
