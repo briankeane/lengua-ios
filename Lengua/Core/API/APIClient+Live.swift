@@ -56,6 +56,37 @@ extension APIClient: DependencyKey {
 
         return decoded.result
       },
+      getVocabItems: { targetLanguageCode, limit, cursor in
+        @Shared(.auth) var auth
+        guard let token = auth.jwtToken, !token.isEmpty else {
+          throw APIError.unauthorized
+        }
+
+        let url = baseUrl.appendingPathComponent("v1/vocab-items")
+        var parameters: [String: Any] = ["limit": limit ?? 50]
+        if let targetLanguageCode { parameters["targetLanguageCode"] = targetLanguageCode }
+        if let cursor { parameters["cursor"] = cursor }
+
+        let response = await session.request(
+          url,
+          parameters: parameters,
+          encoding: URLEncoding.default,
+          headers: [.authorization(bearerToken: token)]
+        ).serializingData().response
+
+        guard let httpResponse = response.response,
+          (200..<300).contains(httpResponse.statusCode),
+          let data = response.data
+        else { throw APIError.dataNotValid }
+
+        guard
+          let decoded = try? JSONDecoder.lenguaISO8601.decode(
+            VocabItemsResponse.self, from: data)
+        else { throw APIError.dataNotValid }
+
+        return VocabItemsPage(
+          items: decoded.vocabItems, nextCursor: decoded.pagination.nextCursor)
+      },
       saveVocabItem: { request in
         @Shared(.auth) var auth
         guard let token = auth.jwtToken, !token.isEmpty else {
@@ -82,7 +113,7 @@ extension APIClient: DependencyKey {
         }
 
         guard let data = response.data,
-          let item = try? JSONDecoder().decode(VocabItem.self, from: data)
+          let item = try? JSONDecoder.lenguaISO8601.decode(VocabItem.self, from: data)
         else { throw APIError.dataNotValid }
 
         return item

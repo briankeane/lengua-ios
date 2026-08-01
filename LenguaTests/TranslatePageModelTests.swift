@@ -1,6 +1,7 @@
 import ConcurrencyExtras
 import CustomDump
 import Dependencies
+import Sharing
 import Testing
 
 @testable import Lengua
@@ -281,6 +282,59 @@ extension TranslatePageModelTests {
     expectNoDifference(model.saveState, .saved)
     expectNoDifference(model.saveButtonTitle, "Saved")
     #expect(model.isSaveEnabled == false)
+  }
+
+  @Test func savingAddsItemToSharedLibrary() async {
+    let clock = TestClock()
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "el perro" }
+      $0.api.saveVocabItem = { request in
+        VocabItem(
+          id: "v1", targetLanguageCode: request.targetLanguageCode,
+          sourceText: request.sourceText, targetText: request.targetText)
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "the dog"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    await model.saveButtonTapped()
+
+    expectNoDifference(vocabItems.items.map(\.id), ["v1"])
+    expectNoDifference(vocabItems.items.map(\.targetText), ["el perro"])
+  }
+
+  @Test func savingDoesNotLeakItemAcrossAccountSwitch() async {
+    let clock = TestClock()
+    @Shared(.auth) var auth = Auth(jwtToken: "userA")
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "el perro" }
+      $0.api.saveVocabItem = { request in
+        @Shared(.auth) var auth
+        $auth.withLock { $0 = Auth(jwtToken: "userB") }  // account switches mid-save
+        return VocabItem(
+          id: "v1", targetLanguageCode: request.targetLanguageCode,
+          sourceText: request.sourceText, targetText: request.targetText)
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "the dog"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    await model.saveButtonTapped()
+
+    // userA's saved phrase must not appear in userB's library.
+    expectNoDifference(vocabItems.items.isEmpty, true)
   }
 
   @Test func saveUsesTargetLanguageCodeForActiveDirection() async {

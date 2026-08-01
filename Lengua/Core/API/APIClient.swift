@@ -15,6 +15,14 @@ struct APIClient: Sendable {
   /// Exchanges a Google ID token for a Lengua session (JWT + user).
   var signInViaGoogle: @Sendable (_ idToken: String) async throws -> GoogleSignInResult
 
+  /// Fetches one page of the caller's vocab items (auth required).
+  var getVocabItems:
+    @Sendable (
+      _ targetLanguageCode: String?,
+      _ limit: Int?,
+      _ cursor: String?
+    ) async throws -> VocabItemsPage
+
   /// Saves a translated word/phrase for the signed-in user (auth required).
   /// The server treats 201 (newly saved) and 200 (already saved) identically,
   /// so both resolve to the returned item without error.
@@ -46,6 +54,21 @@ struct GoogleSignInResponse: Decodable {
         lastName: user.lastName, profileImageUrl: user.profileImageUrl),
       token: token)
   }
+}
+
+struct VocabItemsPage: Equatable, Sendable {
+  var items: [VocabItem]
+  var nextCursor: String?
+}
+
+/// Decodes the `GET /v1/vocab-items` response envelope.
+struct VocabItemsResponse: Decodable {
+  struct Pagination: Decodable {
+    let limit: Int
+    let nextCursor: String?
+  }
+  let vocabItems: [VocabItem]
+  let pagination: Pagination
 }
 
 enum APIError: Error, LocalizedError {

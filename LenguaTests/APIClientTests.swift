@@ -43,7 +43,53 @@ struct APIClientTests {
     expectNoDifference(decoded.user.profileImageUrl, "https://img/1.png")
   }
 
-  @Test func vocabItemDecodesIgnoringServerOwnedFields() throws {
+  @Test func getVocabItemsUsesInjectedDependency() async throws {
+    let page = try await withDependencies {
+      $0.api.getVocabItems = { languageCode, limit, cursor in
+        expectNoDifference(languageCode, nil)
+        expectNoDifference(limit, 100)
+        expectNoDifference(cursor, nil)
+        return VocabItemsPage(
+          items: [
+            VocabItem(
+              id: "1", targetLanguageCode: "es", sourceText: "dog",
+              targetText: "perro", familiarity: 0, lastSeenAt: nil,
+              timesSeen: 0, timesCorrect: 0, timesIncorrect: 0,
+              lastOutcome: nil, nextDueAt: nil,
+              createdAt: Date(timeIntervalSince1970: 0),
+              updatedAt: Date(timeIntervalSince1970: 0))
+          ],
+          nextCursor: "next-token")
+      }
+    } operation: {
+      @Dependency(\.api) var api
+      return try await api.getVocabItems(nil, 100, nil)
+    }
+    expectNoDifference(page.items.map(\.id), ["1"])
+    expectNoDifference(page.nextCursor, "next-token")
+  }
+
+  @Test func vocabItemsResponseDecodesEnvelope() throws {
+    let json = Data(
+      """
+      {
+        "vocabItems": [
+          { "id": "1", "targetLanguageCode": "es", "sourceText": "dog",
+            "targetText": "perro", "familiarity": 2, "lastSeenAt": null,
+            "timesSeen": 0, "timesCorrect": 0, "timesIncorrect": 0,
+            "lastOutcome": null, "nextDueAt": null,
+            "createdAt": "2026-08-01T10:00:00.000Z",
+            "updatedAt": "2026-08-01T10:00:00.000Z" }
+        ],
+        "pagination": { "limit": 50, "nextCursor": null }
+      }
+      """.utf8)
+    let decoded = try JSONDecoder.lenguaISO8601.decode(VocabItemsResponse.self, from: json)
+    expectNoDifference(decoded.vocabItems.map(\.targetText), ["perro"])
+    expectNoDifference(decoded.pagination.nextCursor, nil)
+  }
+
+  @Test func vocabItemDecodesIgnoringUnknownServerFields() throws {
     let json = Data(
       """
       {
@@ -65,7 +111,7 @@ struct APIClientTests {
       }
       """.utf8)
 
-    let decoded = try JSONDecoder().decode(VocabItem.self, from: json)
+    let decoded = try JSONDecoder.lenguaISO8601.decode(VocabItem.self, from: json)
 
     expectNoDifference(decoded.id, "item-1")
     expectNoDifference(decoded.targetLanguageCode, "es")
