@@ -120,6 +120,7 @@ final class TranslatePageModel: ViewModel {
   var outputIsPlaceholder: Bool { outputText.isEmpty }
   var outputDisplayText: String { outputText.isEmpty ? outputPlaceholder : outputText }
   var speakItHint: String { "Speak it" }
+  var doneButtonTitle: String { "Done" }
 
   // MARK: - Private Helpers
   private func scheduleTranslation() {
@@ -159,6 +160,7 @@ final class TranslatePageModel: ViewModel {
 
 struct TranslatePage: View {
   @State var model: TranslatePageModel
+  @FocusState private var isInputFocused: Bool
 
   private let pageBlue = Color(red: 0.24, green: 0.29, blue: 0.85)
   private let deepBlue = Color(red: 0.15, green: 0.20, blue: 0.55)
@@ -179,8 +181,15 @@ struct TranslatePage: View {
         .frame(maxWidth: .infinity, minHeight: proxy.size.height)
       }
     }
+    .scrollDismissesKeyboard(.interactively)
     .background(pageBlue.ignoresSafeArea())
     .lenguaAlert($model.presentedAlert)
+    .toolbar {
+      ToolbarItemGroup(placement: .keyboard) {
+        Spacer()
+        Button(model.doneButtonTitle) { isInputFocused = false }
+      }
+    }
     .onDisappear { model.pageDisappeared() }
   }
 
@@ -193,6 +202,7 @@ struct TranslatePage: View {
       TextField(model.inputPlaceholder, text: $model.inputText, axis: .vertical)
         .font(.largeTitle)
         .foregroundStyle(.primary)
+        .focused($isInputFocused)
       Spacer(minLength: 24)
       HStack(alignment: .bottom) {
         Text(model.speakItHint)
