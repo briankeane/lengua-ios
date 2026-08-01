@@ -59,6 +59,7 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: Lengua/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Lengua/Lengua.entitlements
         GENERATE_INFOPLIST_FILE: NO
         PRODUCT_BUNDLE_IDENTIFIER: com.lengua-app.lengua
         PRODUCT_NAME: Lengua

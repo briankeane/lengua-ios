@@ -43,6 +43,32 @@ struct APIClientTests {
     expectNoDifference(decoded.user.profileImageUrl, "https://img/1.png")
   }
 
+  @Test func appleSignInResponseDecodesUserAndToken() throws {
+    let json = Data(
+      """
+      {
+        "user": {
+          "id": "apple-u1",
+          "firstName": "Sam",
+          "lastName": "Lee",
+          "displayName": "Sam Lee",
+          "email": "sam@example.com",
+          "profileImageUrl": "https://img/1.png",
+          "role": "user"
+        },
+        "token": "jwt-apple-123"
+      }
+      """.utf8)
+
+    let decoded = try JSONDecoder().decode(AppleSignInResponse.self, from: json)
+
+    expectNoDifference(decoded.token, "jwt-apple-123")
+    expectNoDifference(decoded.result.user.id, "apple-u1")
+    expectNoDifference(decoded.result.user.email, "sam@example.com")
+    expectNoDifference(decoded.result.user.firstName, "Sam")
+    expectNoDifference(decoded.result.token, "jwt-apple-123")
+  }
+
   @Test func vocabItemDecodesIgnoringServerOwnedFields() throws {
     let json = Data(
       """
