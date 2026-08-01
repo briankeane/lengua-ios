@@ -51,4 +51,26 @@ struct TranslatorClientTests {
       }
     }
   }
+
+  @Test func prepareTranslationPassesDirectionToDependency() async throws {
+    try await withDependencies {
+      $0.translator.prepareTranslation = { direction in
+        expectNoDifference(direction, .spanishToEnglish)
+      }
+    } operation: {
+      @Dependency(\.translator) var translator
+      try await translator.prepareTranslation(.spanishToEnglish)
+    }
+  }
+
+  @Test func prepareTranslationPropagatesProviderError() async {
+    await #expect(throws: TranslatorError.downloadRequired) {
+      try await withDependencies {
+        $0.translator.prepareTranslation = { _ in throw TranslatorError.downloadRequired }
+      } operation: {
+        @Dependency(\.translator) var translator
+        try await translator.prepareTranslation(.englishToSpanish)
+      }
+    }
+  }
 }
