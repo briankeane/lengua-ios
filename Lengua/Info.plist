@@ -31,6 +31,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Lengua uses the microphone to turn what you say into text to translate.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Lengua uses speech recognition to transcribe your speech for translation.</string>
 	<key>GIDClientID</key>
 	<string>458159274501-5s2dkcsiuupf0reus35c60976lrrvgg0.apps.googleusercontent.com</string>
 	<key>GIDServerClientID</key>

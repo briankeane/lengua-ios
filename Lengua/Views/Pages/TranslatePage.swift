@@ -9,6 +9,7 @@ final class TranslatePageModel: ViewModel {
   @ObservationIgnored @Dependency(\.translator) var translator
   @ObservationIgnored @Dependency(\.continuousClock) var clock
   @ObservationIgnored @Dependency(\.speechSynthesizer) var speechSynthesizer
+  @ObservationIgnored @Dependency(\.speechRecognizer) var speechRecognizer
 
   // MARK: - Initialization
   override init() { super.init() }
@@ -23,13 +24,18 @@ final class TranslatePageModel: ViewModel {
   }
   var outputText = ""
   var isTranslating = false
+  var isRecording = false
   var presentedAlert: LenguaAlert?
 
   @ObservationIgnored private(set) var translationTask: Task<Void, Never>?
+  @ObservationIgnored private(set) var recognitionTask: Task<Void, Never>?
 
   // MARK: - User Actions
   func swapButtonTapped() {
     translationTask?.cancel()
+    // Stop dictation: it was started for the old direction's locale, so continuing
+    // would feed the wrong language into the newly-flipped direction.
+    recognitionTask?.cancel()
     direction.toggle()
     let previousInput = inputText
     inputText = outputText  // didSet schedules a fresh translation
@@ -39,19 +45,67 @@ final class TranslatePageModel: ViewModel {
   func pageDisappeared() {
     // Cancel any in-flight/debouncing translation so a request that fails while
     // the user is on another tab can't set `presentedAlert` and surface a stale
-    // "Translation Failed" alert when they return.
+    // "Translation Failed" alert when they return. Also stop dictation so the mic
+    // and record audio session are released when leaving the tab.
     translationTask?.cancel()
+    recognitionTask?.cancel()
+    // Stop any in-progress speech so it doesn't keep the playback audio session
+    // active after we've left the tab.
+    Task { await speechSynthesizer.stop() }
   }
 
   func speakerButtonTapped() async {
     guard !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    // Serialize with dictation: stop the recognizer (and let its .record session
+    // tear down) before TTS takes the shared audio session with .playback.
+    recognitionTask?.cancel()
+    await recognitionTask?.value
     do {
       try await speechSynthesizer.speak(outputText, direction.speechSynthesisLanguageIdentifier)
     } catch {
       presentedAlert = .speechSynthesisFailed
     }
   }
-  func micButtonTapped() {}  // wired in Stage 5
+
+  func micButtonTapped() {
+    if isRecording {
+      recognitionTask?.cancel()
+      return
+    }
+    // Set `isRecording` synchronously so a second tap toggles off instead of
+    // starting a second recognition task (which would fight for the mic).
+    isRecording = true
+    recognitionTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer { isRecording = false }
+      let status = await speechRecognizer.requestAuthorization()
+      // The permission prompt is an async suspension point: if a second tap or
+      // `pageDisappeared()` cancelled us while it was up, bail before turning on
+      // the mic (and before surfacing a denial alert on a page we've left).
+      guard !Task.isCancelled else { return }
+      guard status == .authorized else {
+        presentedAlert = .speechRecognitionPermissionDenied
+        return
+      }
+      // Serialize with TTS: release its .playback session before we take the mic's
+      // .record session so the two never fight over the shared audio session.
+      await speechSynthesizer.stop()
+      guard !Task.isCancelled else { return }
+      do {
+        let stream = try await speechRecognizer.start(direction.speechRecognitionLocaleIdentifier)
+        for try await result in stream {
+          inputText = result.transcript  // drives auto-translate via didSet
+        }
+      } catch is CancellationError {
+      } catch {
+        // A cancelled recognizer often reports a framework error rather than a
+        // CancellationError; don't surface a failure alert for a deliberate stop.
+        guard !Task.isCancelled else { return }
+        presentedAlert = .speechRecognitionFailed
+      }
+      await speechRecognizer.stop()
+    }
+  }
 
   // MARK: - View Helpers
   var inputLabel: String { direction.inputLabel }
@@ -145,11 +199,11 @@ struct TranslatePage: View {
           .foregroundStyle(.secondary)
         Spacer()
         Button(action: model.micButtonTapped) {
-          Image(systemName: "mic.fill")
+          Image(systemName: model.isRecording ? "stop.fill" : "mic.fill")
             .font(.title2)
             .foregroundStyle(.white)
             .frame(width: 56, height: 56)
-            .background(Circle().fill(pageBlue))
+            .background(Circle().fill(model.isRecording ? deepBlue : pageBlue))
         }
       }
     }
