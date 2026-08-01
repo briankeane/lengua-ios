@@ -5,6 +5,7 @@ import Testing
 
 @testable import Lengua
 
+@Suite(.serialized)
 @MainActor
 struct TranslatePageModelTests {
   @Test func initialLabelsAreEnglishToSpanish() {
@@ -230,7 +231,275 @@ struct TranslatePageModelTests {
     #expect(model.outputIsPlaceholder == false)
     expectNoDifference(model.outputDisplayText, model.outputText)
   }
+}
 
+extension TranslatePageModelTests {
+  @Test func saveIsDisabledUntilTranslationPresent() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "Hola" }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    #expect(model.isSaveEnabled == false)
+
+    model.inputText = "Hello"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    #expect(model.isSaveEnabled == true)
+  }
+
+  @Test func saveSendsTrimmedRequestAndMarksSaved() async {
+    let clock = TestClock()
+    let captured = LockIsolated<SaveVocabItemRequest?>(nil)
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "el perro" }
+      $0.api.saveVocabItem = { request in
+        captured.setValue(request)
+        return VocabItem(
+          id: "v1", targetLanguageCode: request.targetLanguageCode,
+          sourceText: request.sourceText, targetText: request.targetText)
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "the dog"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    await model.saveButtonTapped()
+
+    expectNoDifference(
+      captured.value,
+      SaveVocabItemRequest(
+        targetLanguageCode: "es", sourceText: "the dog", targetText: "el perro"))
+    expectNoDifference(model.saveState, .saved)
+    expectNoDifference(model.saveButtonTitle, "Saved")
+    #expect(model.isSaveEnabled == false)
+  }
+
+  @Test func saveUsesTargetLanguageCodeForActiveDirection() async {
+    let clock = TestClock()
+    let captured = LockIsolated<SaveVocabItemRequest?>(nil)
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "the dog" }
+      $0.api.saveVocabItem = { request in
+        captured.setValue(request)
+        return VocabItem(
+          id: "v1", targetLanguageCode: request.targetLanguageCode,
+          sourceText: request.sourceText, targetText: request.targetText)
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.direction = .spanishToEnglish
+    model.inputText = "el perro"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    await model.saveButtonTapped()
+
+    expectNoDifference(captured.value?.targetLanguageCode, "en")
+    expectNoDifference(captured.value?.sourceText, "el perro")
+    expectNoDifference(captured.value?.targetText, "the dog")
+  }
+
+  @Test func saveFailureSurfacesAlertAndResetsState() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "el perro" }
+      $0.api.saveVocabItem = { _ in throw APIError.validationError("boom") }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "the dog"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    await model.saveButtonTapped()
+
+    expectNoDifference(model.saveState, .idle)
+    expectNoDifference(model.presentedAlert, .saveFailed)
+    #expect(model.isSaveEnabled == true)
+  }
+
+  @Test func editingAfterSaveClearsSavedState() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { text, _ in "t:\(text)" }
+      $0.api.saveVocabItem = { request in
+        VocabItem(
+          id: "v1", targetLanguageCode: request.targetLanguageCode,
+          sourceText: request.sourceText, targetText: request.targetText)
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "dog"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+    await model.saveButtonTapped()
+    expectNoDifference(model.saveState, .saved)
+
+    model.inputText = "dogs"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    expectNoDifference(model.saveState, .idle)  // a fresh translation is unsaved
+    #expect(model.isSaveEnabled == true)
+  }
+
+  @Test func saveDoesNothingWithoutTranslation() async {
+    let called = LockIsolated(false)
+    let model = withDependencies {
+      $0.api.saveVocabItem = { _ in
+        called.setValue(true)
+        return VocabItem(id: "", targetLanguageCode: "", sourceText: "", targetText: "")
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    await model.saveButtonTapped()
+
+    #expect(called.value == false)
+    expectNoDifference(model.saveState, .idle)
+  }
+}
+
+extension TranslatePageModelTests {
+  @Test func editingInputClearsSavedStateImmediately() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "el perro" }
+      $0.api.saveVocabItem = { request in
+        VocabItem(
+          id: "v1", targetLanguageCode: request.targetLanguageCode,
+          sourceText: request.sourceText, targetText: request.targetText)
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "the dog"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+    await model.saveButtonTapped()
+    expectNoDifference(model.saveState, .saved)
+
+    model.inputText = "the dogs"  // editing the source is unsaved, immediately
+    expectNoDifference(model.saveState, .idle)
+  }
+
+  @Test func unauthorizedSaveSurfacesSignInAlert() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "el perro" }
+      $0.api.saveVocabItem = { _ in throw APIError.unauthorized }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "the dog"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    await model.saveButtonTapped()
+
+    expectNoDifference(model.presentedAlert, .saveRequiresSignIn)
+    expectNoDifference(model.saveState, .idle)
+  }
+
+  @Test func saveBlockedWhileOutputIsStaleAfterEdit() async {
+    let clock = TestClock()
+    let saveCalled = LockIsolated(false)
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { text, _ in text == "the dog" ? "el perro" : "el gato" }
+      $0.api.saveVocabItem = { request in
+        saveCalled.setValue(true)
+        return VocabItem(
+          id: "v1", targetLanguageCode: request.targetLanguageCode,
+          sourceText: request.sourceText, targetText: request.targetText)
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "the dog"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+    expectNoDifference(model.outputText, "el perro")
+
+    // Editing the source leaves the old target visible until retranslation lands.
+    model.inputText = "the cat"
+    #expect(model.isTranslating == true)
+    #expect(model.isSaveEnabled == false)
+
+    await model.saveButtonTapped()  // must not persist the mismatched pair
+    #expect(saveCalled.value == false)
+    expectNoDifference(model.saveState, .idle)
+
+    // Once retranslation completes, the correct pair can be saved.
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+    expectNoDifference(model.outputText, "el gato")
+    #expect(model.isSaveEnabled == true)
+  }
+
+  @Test func editingMidSaveDiscardsStaleSavedResult() async {
+    let clock = TestClock()
+    let (started, startedContinuation) = AsyncStream<Void>.makeStream()
+    let (resume, resumeContinuation) = AsyncStream<Void>.makeStream()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { text, _ in "t:\(text)" }
+      $0.api.saveVocabItem = { request in
+        startedContinuation.yield()
+        var iterator = resume.makeAsyncIterator()
+        _ = await iterator.next()
+        return VocabItem(
+          id: "v1", targetLanguageCode: request.targetLanguageCode,
+          sourceText: request.sourceText, targetText: request.targetText)
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "dog"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    let saveTask = Task { await model.saveButtonTapped() }
+    var startedIterator = started.makeAsyncIterator()
+    await startedIterator.next()  // save request is in flight
+    expectNoDifference(model.saveState, .saving)
+
+    model.inputText = "dogs"  // edit mid-save: changes the term being saved
+    expectNoDifference(model.saveState, .idle)
+
+    resumeContinuation.yield()
+    resumeContinuation.finish()
+    await saveTask.value
+
+    expectNoDifference(model.saveState, .idle)  // stale success must not mark .saved
+  }
+}
+
+extension TranslatePageModelTests {
   @Test func speakerErrorSurfacesAlert() async {
     let clock = TestClock()
     let model = withDependencies {
@@ -250,8 +519,7 @@ struct TranslatePageModelTests {
   }
 }
 
-@MainActor
-struct TranslatePageModelDictationTests {
+extension TranslatePageModelTests {
   @Test func micDictationFlowsIntoInputText() async {
     let clock = TestClock()
     let model = withDependencies {
@@ -404,8 +672,7 @@ struct TranslatePageModelDictationTests {
   }
 }
 
-@MainActor
-struct TranslatePageModelCancellationTests {
+extension TranslatePageModelTests {
   private typealias Continuation =
     AsyncThrowingStream<SpeechRecognitionResult, Error>.Continuation
 

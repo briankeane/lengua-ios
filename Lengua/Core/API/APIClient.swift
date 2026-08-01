@@ -14,6 +14,11 @@ struct APIClient: Sendable {
 
   /// Exchanges a Google ID token for a Lengua session (JWT + user).
   var signInViaGoogle: @Sendable (_ idToken: String) async throws -> GoogleSignInResult
+
+  /// Saves a translated word/phrase for the signed-in user (auth required).
+  /// The server treats 201 (newly saved) and 200 (already saved) identically,
+  /// so both resolve to the returned item without error.
+  var saveVocabItem: @Sendable (_ request: SaveVocabItemRequest) async throws -> VocabItem
 }
 
 struct GoogleSignInResult: Equatable, Sendable {
@@ -46,11 +51,13 @@ struct GoogleSignInResponse: Decodable {
 enum APIError: Error, LocalizedError {
   case dataNotValid
   case validationError(String)
+  case unauthorized
 
   var errorDescription: String? {
     switch self {
     case .dataNotValid: return "Invalid data received from server"
     case .validationError(let message): return message
+    case .unauthorized: return "You need to be signed in to do that"
     }
   }
 }

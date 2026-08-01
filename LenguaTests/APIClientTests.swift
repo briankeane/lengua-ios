@@ -42,4 +42,34 @@ struct APIClientTests {
     expectNoDifference(decoded.user.firstName, "Sam")
     expectNoDifference(decoded.user.profileImageUrl, "https://img/1.png")
   }
+
+  @Test func vocabItemDecodesIgnoringServerOwnedFields() throws {
+    let json = Data(
+      """
+      {
+        "id": "item-1",
+        "userId": "user-1",
+        "targetLanguageCode": "es",
+        "sourceText": "the dog",
+        "targetText": "el perro",
+        "targetTextNormalized": "el perro",
+        "familiarity": 0,
+        "lastSeenAt": null,
+        "timesSeen": 0,
+        "timesCorrect": 0,
+        "timesIncorrect": 0,
+        "lastOutcome": null,
+        "nextDueAt": null,
+        "createdAt": "2026-08-01T00:00:00.000Z",
+        "updatedAt": "2026-08-01T00:00:00.000Z"
+      }
+      """.utf8)
+
+    let decoded = try JSONDecoder().decode(VocabItem.self, from: json)
+
+    expectNoDifference(decoded.id, "item-1")
+    expectNoDifference(decoded.targetLanguageCode, "es")
+    expectNoDifference(decoded.sourceText, "the dog")
+    expectNoDifference(decoded.targetText, "el perro")
+  }
 }

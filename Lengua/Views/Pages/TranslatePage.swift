@@ -6,6 +6,7 @@ import SwiftUI
 final class TranslatePageModel: ViewModel {
 
   // MARK: - Dependencies
+  @ObservationIgnored @Dependency(\.api) var api
   @ObservationIgnored @Dependency(\.translator) var translator
   @ObservationIgnored @Dependency(\.continuousClock) var clock
   @ObservationIgnored @Dependency(\.speechSynthesizer) var speechSynthesizer
@@ -19,13 +20,25 @@ final class TranslatePageModel: ViewModel {
   var inputText = "" {
     didSet {
       guard inputText != oldValue else { return }
+      // Editing the source makes the visible pair unsaved, even if the eventual
+      // translation happens to produce the same output text.
+      saveState = .idle
       scheduleTranslation()
     }
   }
-  var outputText = ""
+  var outputText = "" {
+    didSet {
+      guard outputText != oldValue else { return }
+      // Any new translation content is unsaved: clear a prior "Saved" state.
+      saveState = .idle
+    }
+  }
   var isTranslating = false
   var isRecording = false
+  var saveState: SaveState = .idle
   var presentedAlert: LenguaAlert?
+
+  enum SaveState: Equatable { case idle, saving, saved }
 
   @ObservationIgnored private(set) var translationTask: Task<Void, Never>?
   @ObservationIgnored private(set) var recognitionTask: Task<Void, Never>?
@@ -52,6 +65,27 @@ final class TranslatePageModel: ViewModel {
     // Stop any in-progress speech so it doesn't keep the playback audio session
     // active after we've left the tab.
     Task { await speechSynthesizer.stop() }
+  }
+
+  func saveButtonTapped() async {
+    guard saveState == .idle, !isTranslating, let request = currentSaveRequest else { return }
+
+    saveState = .saving
+    do {
+      _ = try await api.saveVocabItem(request)
+      // Ignore the result if the user edited, swapped, or changed direction
+      // mid-save: the visible term no longer matches what we saved.
+      guard currentSaveRequest == request else { return }
+      saveState = .saved
+    } catch {
+      guard currentSaveRequest == request else { return }
+      saveState = .idle
+      if case APIError.unauthorized = error {
+        presentedAlert = .saveRequiresSignIn
+      } else {
+        presentedAlert = .saveFailed
+      }
+    }
   }
 
   func speakerButtonTapped() async {
@@ -121,8 +155,34 @@ final class TranslatePageModel: ViewModel {
   var outputDisplayText: String { outputText.isEmpty ? outputPlaceholder : outputText }
   var speakItHint: String { "Speak it" }
   var doneButtonTitle: String { "Done" }
+  var saveButtonTitle: String {
+    switch saveState {
+    case .idle: "Save to Vocabulary"
+    case .saving: "Saving…"
+    case .saved: "Saved"
+    }
+  }
+  var isSaveEnabled: Bool {
+    // `isTranslating` guards the stale window: after editing the source, the old
+    // output is still visible until retranslation lands, and saving then would
+    // persist the new source paired with the previous target.
+    saveState == .idle && !isTranslating
+      && !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
 
   // MARK: - Private Helpers
+  /// The save request for the currently-visible term, or `nil` when there is
+  /// nothing to save. Used as an identity to detect edits/swaps mid-save.
+  private var currentSaveRequest: SaveVocabItemRequest? {
+    let sourceText = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let targetText = outputText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !sourceText.isEmpty, !targetText.isEmpty else { return nil }
+    return SaveVocabItemRequest(
+      targetLanguageCode: direction.targetLanguageCode,
+      sourceText: sourceText,
+      targetText: targetText)
+  }
+
   private func scheduleTranslation() {
     translationTask?.cancel()
     let text = inputText
@@ -176,6 +236,8 @@ struct TranslatePage: View {
             .padding(.vertical, -20)
             .zIndex(1)
           outputCard
+          saveButton
+            .padding(.top, 16)
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, minHeight: proxy.size.height)
@@ -258,5 +320,20 @@ struct TranslatePage: View {
         .frame(width: 48, height: 48)
         .background(Circle().fill(deepBlue))
     }
+  }
+
+  private var saveButton: some View {
+    Button {
+      Task { await model.saveButtonTapped() }
+    } label: {
+      Text(model.saveButtonTitle)
+        .font(.headline)
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .frame(height: 56)
+        .background(Capsule().fill(deepBlue))
+    }
+    .disabled(!model.isSaveEnabled)
+    .opacity(model.isSaveEnabled ? 1 : 0.4)
   }
 }
