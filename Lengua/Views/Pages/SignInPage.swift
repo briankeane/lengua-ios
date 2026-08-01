@@ -93,14 +93,7 @@ final class SignInPageModel: ViewModel {
       do {
         payload = try decodeAppleAuthorization(authorization)
       } catch {
-        presentedAlert = .signInError
-        await errorReporting.reportMessage(
-          "Error decoding sign-in info from Apple",
-          [
-            "auth_method": "apple",
-            "sign_in_step": "credential_decode",
-            "decode_reason": (error as? AppleCredentialDecodeError)?.rawValue ?? "unknown",
-          ])
+        await handleAppleCredentialDecodeFailure(error)
         return
       }
       await completeAppleSignIn(payload)
@@ -136,6 +129,17 @@ final class SignInPageModel: ViewModel {
     let report = SignInErrorReport(error: error, authMethod: authMethod, step: step)
     await errorReporting.reportErrorWithContext(
       error, report.tags, report.contextKey, report.context)
+  }
+
+  func handleAppleCredentialDecodeFailure(_ error: any Error) async {
+    presentedAlert = .signInError
+    await errorReporting.reportMessage(
+      "Error decoding sign-in info from Apple",
+      [
+        "auth_method": "apple",
+        "sign_in_step": "credential_decode",
+        "decode_reason": (error as? AppleCredentialDecodeError)?.rawValue ?? "unknown",
+      ])
   }
 
   // Thin extraction of the Apple credential. The only piece not unit-tested,

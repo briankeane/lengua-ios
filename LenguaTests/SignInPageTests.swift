@@ -141,7 +141,9 @@ struct SignInPageTests {
         return false
       })
   }
+}
 
+extension SignInPageTests {
   @Test func signInWithAppleSetsScopesAndTracksStarted() async {
     await withMainSerialExecutor {
       @Shared(.auth) var auth = Auth()
@@ -302,5 +304,25 @@ struct SignInPageTests {
 
     expectNoDifference(model.presentedAlert, .signInError)
     expectNoDifference(reportCount.value, 1)
+  }
+
+  @Test func handleAppleCredentialDecodeFailureShowsAlertAndReports() async {
+    @Shared(.auth) var auth = Auth()
+    let reportedTags = LockIsolated<[String: String]>([:])
+
+    let model = withDependencies {
+      $0.errorReporting.reportMessage = { _, tags in
+        reportedTags.withValue { $0 = tags }
+      }
+    } operation: {
+      SignInPageModel()
+    }
+
+    await model.handleAppleCredentialDecodeFailure(AppleCredentialDecodeError.missingIdentityToken)
+
+    expectNoDifference(model.presentedAlert, .signInError)
+    expectNoDifference(reportedTags.value["auth_method"], "apple")
+    expectNoDifference(reportedTags.value["sign_in_step"], "credential_decode")
+    expectNoDifference(reportedTags.value["decode_reason"], "missingIdentityToken")
   }
 }
