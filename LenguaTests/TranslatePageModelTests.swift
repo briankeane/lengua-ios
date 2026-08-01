@@ -309,6 +309,34 @@ extension TranslatePageModelTests {
     expectNoDifference(vocabItems.items.map(\.targetText), ["el perro"])
   }
 
+  @Test func savingDoesNotLeakItemAcrossAccountSwitch() async {
+    let clock = TestClock()
+    @Shared(.auth) var auth = Auth(jwtToken: "userA")
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "el perro" }
+      $0.api.saveVocabItem = { request in
+        @Shared(.auth) var auth
+        $auth.withLock { $0 = Auth(jwtToken: "userB") }  // account switches mid-save
+        return VocabItem(
+          id: "v1", targetLanguageCode: request.targetLanguageCode,
+          sourceText: request.sourceText, targetText: request.targetText)
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "the dog"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+
+    await model.saveButtonTapped()
+
+    // userA's saved phrase must not appear in userB's library.
+    expectNoDifference(vocabItems.items.isEmpty, true)
+  }
+
   @Test func saveUsesTargetLanguageCodeForActiveDirection() async {
     let clock = TestClock()
     let captured = LockIsolated<SaveVocabItemRequest?>(nil)

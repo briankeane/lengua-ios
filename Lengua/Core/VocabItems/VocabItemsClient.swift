@@ -16,6 +16,8 @@ extension VocabItemsClient: DependencyKey {
   static let liveValue = VocabItemsClient(
     refresh: {
       @Shared(.vocabItems) var vocabItems
+      @Shared(.auth) var auth
+      let startingToken = auth.jwtToken  // bind this load to the current account
       let shouldStart = $vocabItems.withLock { state -> Bool in
         guard !state.isLoading else { return false }
         state.isLoading = true
@@ -34,9 +36,11 @@ extension VocabItemsClient: DependencyKey {
           cursor = page.nextCursor
         } while cursor != nil
 
-        @Shared(.auth) var auth
         $vocabItems.withLock { state in
-          if auth.isLoggedIn {  // a sign-out mid-load must not repopulate
+          // Only commit if the same account that started the load is still
+          // signed in: a sign-out or account switch mid-load must not
+          // repopulate the shared Library with the previous user's items.
+          if auth.jwtToken == startingToken {
             // De-dupe rather than trap: keyset pagination can repeat an id
             // across page boundaries if rows shift mid-fetch. Keep the first.
             state.items = IdentifiedArray(loaded, id: \.id) { first, _ in first }

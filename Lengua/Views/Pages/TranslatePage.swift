@@ -15,6 +15,7 @@ final class TranslatePageModel: ViewModel {
 
   // MARK: - Shared State
   @ObservationIgnored @Shared(.vocabItems) var vocabItems
+  @ObservationIgnored @Shared(.auth) var auth
 
   // MARK: - Initialization
   override init() { super.init() }
@@ -112,11 +113,15 @@ final class TranslatePageModel: ViewModel {
     guard saveState == .idle, !isTranslating, let request = currentSaveRequest else { return }
 
     saveState = .saving
+    let startingToken = auth.jwtToken  // bind this save to the current account
     do {
       let item = try await api.saveVocabItem(request)
-      // The item is now persisted server-side, so reflect it in the shared
-      // library immediately (upsert by id) regardless of what's on screen now.
-      $vocabItems.withLock { $0.items[id: item.id] = item }
+      // Reflect the saved item in the shared library, but only if the same
+      // account that started the save is still signed in: a sign-out or
+      // account switch mid-save must not leak the item into another session.
+      if auth.jwtToken == startingToken {
+        $vocabItems.withLock { $0.items[id: item.id] = item }
+      }
       // Ignore the *button* state if the user edited, swapped, or changed
       // direction mid-save: the visible term no longer matches what we saved.
       guard currentSaveRequest == request else { return }

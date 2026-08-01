@@ -113,6 +113,27 @@ struct VocabItemsClientTests {
     }
   }
 
+  @Test func refreshDiscardsResultsIfAccountChangedMidLoad() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in
+        @Shared(.auth) var auth
+        $auth.withLock { $0 = Auth(jwtToken: "userB") }  // a different account signs in
+        return VocabItemsPage(items: [self.item(id: "1")], nextCursor: nil)
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "userA")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()
+
+      // userA's items must not land in userB's library.
+      expectNoDifference(vocabItems.items.isEmpty, true)
+      expectNoDifference(vocabItems.isLoading, false)
+    }
+  }
+
   @Test func refreshIsCoalescedWhileAlreadyLoading() async {
     let callCount = LockIsolated(0)
     await withDependencies {
@@ -123,7 +144,8 @@ struct VocabItemsClientTests {
       $0.vocabItemsClient = .liveValue
     } operation: {
       @Shared(.auth) var auth = Auth(jwtToken: "t")
-      @Shared(.vocabItems) var vocabItems = VocabItems(isLoading: true)  // pretend a load is in flight
+      // pretend a load is already in flight
+      @Shared(.vocabItems) var vocabItems = VocabItems(isLoading: true)
       @Dependency(\.vocabItemsClient) var client
 
       await client.refresh()  // should no-op because isLoading == true
