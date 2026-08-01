@@ -15,6 +15,15 @@ protocol TranslationProvider: Sendable {
   func availability(
     from source: Locale.Language, to target: Locale.Language
   ) async -> TranslatorAvailability
+
+  /// Provokes the on-device model download for the pair if it is missing,
+  /// surfacing the provider's system download UI. Succeeds silently when the
+  /// model is already installed; throws `.downloadRequired` when it is still
+  /// missing afterward. Needs no input text, so it can prompt the download
+  /// before the user has typed.
+  func prepareTranslation(
+    from source: Locale.Language, to target: Locale.Language
+  ) async throws
 }
 
 /// The set of translation backends the app knows about. `String`-backed +

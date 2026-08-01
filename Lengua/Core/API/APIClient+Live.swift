@@ -58,8 +58,8 @@ extension APIClient: DependencyKey {
       },
       getVocabItems: { targetLanguageCode, limit, cursor in
         @Shared(.auth) var auth
-        guard let token = auth.jwtToken else {
-          throw APIError.validationError("You need to be signed in to view your library.")
+        guard let token = auth.jwtToken, !token.isEmpty else {
+          throw APIError.unauthorized
         }
 
         let url = baseUrl.appendingPathComponent("v1/vocab-items")
@@ -86,6 +86,37 @@ extension APIClient: DependencyKey {
 
         return VocabItemsPage(
           items: decoded.vocabItems, nextCursor: decoded.pagination.nextCursor)
+      },
+      saveVocabItem: { request in
+        @Shared(.auth) var auth
+        guard let token = auth.jwtToken, !token.isEmpty else {
+          throw APIError.unauthorized
+        }
+
+        let url = baseUrl.appendingPathComponent("v1/vocab-items")
+        let response = await session.request(
+          url,
+          method: .post,
+          parameters: request,
+          encoder: JSONParameterEncoder.default,
+          headers: [.authorization(bearerToken: token)]
+        ).serializingData().response
+
+        guard let httpResponse = response.response else {
+          throw response.error ?? APIError.dataNotValid
+        }
+
+        if httpResponse.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+          let body = response.data.flatMap { String(data: $0, encoding: .utf8) }
+          throw APIError.validationError(body ?? "Save failed (\(httpResponse.statusCode))")
+        }
+
+        guard let data = response.data,
+          let item = try? JSONDecoder.lenguaISO8601.decode(VocabItem.self, from: data)
+        else { throw APIError.dataNotValid }
+
+        return item
       }
     )
   }()

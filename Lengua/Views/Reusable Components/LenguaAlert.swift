@@ -61,6 +61,18 @@ extension LenguaAlert {
       message: "We couldn't translate that just now. Check your connection and try again.")
   }
 
+  static var saveFailed: LenguaAlert {
+    LenguaAlert(
+      title: "Couldn't Save",
+      message: "We couldn't save that word just now. Check your connection and try again.")
+  }
+
+  static var saveRequiresSignIn: LenguaAlert {
+    LenguaAlert(
+      title: "Sign In to Save",
+      message: "Sign in to save words to your vocabulary.")
+  }
+
   static var speechSynthesisFailed: LenguaAlert {
     LenguaAlert(
       title: "Couldn't Play Audio",
