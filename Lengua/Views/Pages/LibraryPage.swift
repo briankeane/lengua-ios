@@ -85,8 +85,75 @@ struct LibraryPage: View {
   @State var model: LibraryPageModel
 
   var body: some View {
-    Text(model.navigationTitle)
-      .font(.largeTitle)
-      .navigationTitle(model.navigationTitle)
+    List {
+      ForEach(model.sortedItems) { item in
+        LibraryRow(
+          targetText: item.targetText,
+          sourceText: item.sourceText,
+          filledDots: model.familiarityLevel(for: item),
+          totalDots: model.familiarityMaxLevel)
+      }
+    }
+    .overlay {
+      if model.isLoading {
+        ProgressView()
+      } else if model.showsRetry {
+        RetryState(message: model.emptyStateText, buttonTitle: model.retryButtonTitle) {
+          await model.retryButtonTapped()
+        }
+      } else if model.isEmptyStateVisible {
+        ContentUnavailableView(model.emptyStateText, systemImage: "books.vertical")
+      }
+    }
+    .navigationTitle(model.navigationTitle)
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        Menu(model.sortMenuTitle) {
+          Picker(model.sortMenuTitle, selection: $model.sortMode) {
+            ForEach(model.sortModes, id: \.self) { mode in
+              Text(model.sortModeLabel(mode)).tag(mode)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+private struct LibraryRow: View {
+  let targetText: String
+  let sourceText: String
+  let filledDots: Int
+  let totalDots: Int
+
+  var body: some View {
+    HStack {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(targetText).font(.headline)
+        Text(sourceText).font(.subheadline).foregroundStyle(.secondary)
+      }
+      Spacer()
+      HStack(spacing: 3) {
+        ForEach(0..<totalDots, id: \.self) { index in
+          Circle()
+            .fill(index < filledDots ? Color.accentColor : Color.secondary.opacity(0.25))
+            .frame(width: 7, height: 7)
+        }
+      }
+    }
+  }
+}
+
+private struct RetryState: View {
+  let message: String
+  let buttonTitle: String
+  let retry: () async -> Void
+
+  var body: some View {
+    ContentUnavailableView {
+      Label(message, systemImage: "exclamationmark.triangle")
+    } actions: {
+      Button(buttonTitle) { Task { await retry() } }
+    }
   }
 }
