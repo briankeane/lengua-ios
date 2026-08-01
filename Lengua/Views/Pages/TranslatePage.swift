@@ -68,7 +68,7 @@ final class TranslatePageModel: ViewModel {
   }
 
   func saveButtonTapped() async {
-    guard saveState == .idle, let request = currentSaveRequest else { return }
+    guard saveState == .idle, !isTranslating, let request = currentSaveRequest else { return }
 
     saveState = .saving
     do {
@@ -163,7 +163,11 @@ final class TranslatePageModel: ViewModel {
     }
   }
   var isSaveEnabled: Bool {
-    saveState == .idle && !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    // `isTranslating` guards the stale window: after editing the source, the old
+    // output is still visible until retranslation lands, and saving then would
+    // persist the new source paired with the previous target.
+    saveState == .idle && !isTranslating
+      && !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
   // MARK: - Private Helpers

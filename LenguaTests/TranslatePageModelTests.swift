@@ -423,6 +423,43 @@ extension TranslatePageModelTests {
     expectNoDifference(model.saveState, .idle)
   }
 
+  @Test func saveBlockedWhileOutputIsStaleAfterEdit() async {
+    let clock = TestClock()
+    let saveCalled = LockIsolated(false)
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { text, _ in text == "the dog" ? "el perro" : "el gato" }
+      $0.api.saveVocabItem = { request in
+        saveCalled.setValue(true)
+        return VocabItem(
+          id: "v1", targetLanguageCode: request.targetLanguageCode,
+          sourceText: request.sourceText, targetText: request.targetText)
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "the dog"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+    expectNoDifference(model.outputText, "el perro")
+
+    // Editing the source leaves the old target visible until retranslation lands.
+    model.inputText = "the cat"
+    #expect(model.isTranslating == true)
+    #expect(model.isSaveEnabled == false)
+
+    await model.saveButtonTapped()  // must not persist the mismatched pair
+    #expect(saveCalled.value == false)
+    expectNoDifference(model.saveState, .idle)
+
+    // Once retranslation completes, the correct pair can be saved.
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+    expectNoDifference(model.outputText, "el gato")
+    #expect(model.isSaveEnabled == true)
+  }
+
   @Test func editingMidSaveDiscardsStaleSavedResult() async {
     let clock = TestClock()
     let (started, startedContinuation) = AsyncStream<Void>.makeStream()
