@@ -20,6 +20,14 @@ struct TranslatorClient: Sendable {
   /// model download, or does not support the pair.
   var availability: @Sendable (_ direction: TranslationDirection) async -> TranslatorAvailability =
     { _ in .unknown }
+
+  /// Provokes the on-device model download for `direction` if it is not yet
+  /// installed, surfacing the provider's system download UI. Succeeds silently
+  /// when the model is already installed. Throws `.downloadRequired` when the
+  /// model is still missing after the attempt (e.g. the user dismissed the
+  /// sheet). Unlike `translate`, this needs no input text, so it can prompt the
+  /// download before the user has typed anything.
+  var prepareTranslation: @Sendable (_ direction: TranslationDirection) async throws -> Void
 }
 
 /// Domain error for translation. Named `TranslatorError` (not `TranslationError`)

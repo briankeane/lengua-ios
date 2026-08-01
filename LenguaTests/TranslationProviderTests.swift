@@ -101,6 +101,13 @@ struct TranslationProviderTests {
     #expect(availability == .unknown)
   }
 
+  @Test func deepLPrepareTranslationThrowsNotImplemented() async {
+    let provider = DeepLTranslationProvider()
+    await #expect(throws: TranslatorError.notImplemented) {
+      try await provider.prepareTranslation(from: english, to: spanish)
+    }
+  }
+
   @Test func brokerReturnsEmptyForBlankInputWithoutHost() async throws {
     // Blank input short-circuits before any host/session is required.
     let broker = AppleTranslationBroker()
@@ -115,6 +122,62 @@ struct TranslationProviderTests {
     await #expect(throws: TranslatorError.notReady) {
       try await broker.translate("Hello", from: english, to: spanish)
     }
+  }
+
+  // MARK: - prepareTranslation (text-less download provoke)
+
+  @Test func brokerPrepareThrowsNotReadyWhenNoHostMounted() async {
+    // A text-less provoke with no mounted host fails fast, the same as translate,
+    // rather than suspending forever (e.g. the Simulator, where there is no host).
+    let broker = AppleTranslationBroker()
+    await #expect(throws: TranslatorError.notReady) {
+      try await broker.prepareTranslation(from: english, to: spanish)
+    }
+  }
+
+  @Test func brokerPrepareFailsPendingWithNotReadyWhenLastHostUnmounts() async {
+    // A prepare request waiting on a session is released with `.notReady` when
+    // the last host disappears, rather than hanging.
+    let broker = AppleTranslationBroker()
+    broker.hostDidMount()
+    let task = Task { @MainActor in
+      try await broker.prepareTranslation(from: english, to: spanish)
+    }
+    await Task.yield()
+    broker.hostDidUnmount()
+    await #expect(throws: TranslatorError.notReady) {
+      try await task.value
+    }
+  }
+
+  @Test func brokerPrepareCancellationUnblocksWaiter() async {
+    // With a host mounted the prepare request suspends waiting for a session;
+    // cancelling the caller unblocks it with CancellationError rather than leaking.
+    let broker = AppleTranslationBroker()
+    broker.hostDidMount()
+    let task = Task { @MainActor in
+      try await broker.prepareTranslation(from: english, to: spanish)
+    }
+    task.cancel()
+    await #expect(throws: CancellationError.self) {
+      try await task.value
+    }
+  }
+
+  @Test func brokerPrepareArmsConfigurationForPair() async {
+    // A prepare request arms a session configuration for its pair, exactly like
+    // translate — that configuration is what re-runs the host's `.translationTask`
+    // and provokes `prepareTranslation()`.
+    let broker = AppleTranslationBroker()
+    broker.hostDidMount()
+    let task = Task { @MainActor in
+      try await broker.prepareTranslation(from: english, to: spanish)
+    }
+    await Task.yield()
+    #expect(broker.configuration?.source == english)
+    #expect(broker.configuration?.target == spanish)
+    broker.hostDidUnmount()  // releases the waiter with .notReady
+    _ = await task.result
   }
 
   @Test func brokerFailsPendingWithNotReadyWhenLastHostUnmounts() async {
