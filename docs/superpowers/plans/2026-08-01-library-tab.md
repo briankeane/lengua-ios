@@ -2,24 +2,25 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the placeholder "Deck" tab with a read-only "Library" tab that lists all of the user's vocab items, sortable alphabetically / by date / by familiarity.
+**Goal:** Replace the placeholder "Deck" tab with a read-only "Library" tab that lists all of the user's vocab items (sortable alphabetically / by date / by familiarity), backed by app-wide shared vocab state that loads on sign-in + foreground and clears on sign-out.
 
-**Architecture:** New `VocabItem` Codable model + a thin single-page `APIClient.getVocabItems` endpoint. `LibraryPageModel` (an `@Observable` MV model) pages through the endpoint on appear, holds every item in memory, and sorts client-side. `LibraryPage` renders the list with a familiarity-dots indicator and a sort control. Deck files are renamed to Library and the tab is rewired.
+**Architecture:** `VocabItem` Codable model + a thin single-page `APIClient.getVocabItems`. Vocab items live in an in-memory `@Shared(.vocabItems)` value (`VocabItems` struct with items + load flags). A `VocabItemsClient` dependency owns the load-all loop; `ContentViewModel` drives it from auth + scenePhase. `LibraryPageModel` reads the shared state and sorts; `LibraryPage` renders it.
 
 **Tech Stack:** SwiftUI, Point-Free `swift-dependencies` / `swift-sharing` / `swift-identified-collections`, Alamofire, swift-testing + CustomDump.
 
 ## Global Constraints
 
-- **Point-Free Workflow (pfw-*) skills are mandatory** before writing Swift: `pfw-observable-models` (models), `pfw-dependencies` (APIClient), `pfw-sharing` (`@Shared`), `pfw-identified-collections` (`IdentifiedArrayOf`), `pfw-testing` + `pfw-custom-dump` (tests). Each subagent must invoke the relevant ones first.
+- **Point-Free Workflow (pfw-*) skills are mandatory** before writing Swift: `pfw-observable-models` (models), `pfw-dependencies` (clients), `pfw-sharing` (`@Shared`), `pfw-identified-collections` (`IdentifiedArrayOf`), `pfw-testing` + `pfw-custom-dump` (tests). Each subagent invokes the relevant ones first.
 - **Tests use swift-testing only** — `import Testing`, `@Suite`/`@Test`, `@MainActor` structs. Convert any XCTest file you touch. Use `expectNoDifference` / `expectDifference`, never raw `#expect(a == b)` for value comparisons.
-- **Test naming:** camelCase, no `test` prefix, no underscores (e.g. `loadsAllPages`).
+- **Suites touching process-global `@Shared` state are `@MainActor` and `.serialized`.** Declare `@Shared` locally per test with an initial value (e.g. `@Shared(.auth) var auth = Auth(jwtToken: "t")`), matching `YouPageModelTests` / `SignInPageTests`.
+- **Test naming:** camelCase, no `test` prefix, no underscores.
 - **Tests colocated:** `LenguaTests/<Name>Tests.swift`.
 - **MV rules:** the Model owns every string and all behavior; the View has zero logic and zero hardcoded strings.
 - **Model MARK order:** Dependencies → Shared State → Initialization → Properties → User Actions → View Helpers → Private Helpers.
-- **Models & tests are `@MainActor`.** Suites touching process-global `@Shared` state are `.serialized`.
-- **Run tests with `make test`; format with `make format`; lint with `make lint`** before each commit. The pre-commit hook may also run these.
-- **No `Task.sleep` in tests.** Use injected test doubles that execute synchronously.
-- Endpoint contract (verbatim): `limit` range 1–100 default 50; `cursor` opaque (never construct/parse); `nextCursor == null` means end; timestamps are ISO8601 with fractional milliseconds and `Z` (`2026-08-01T10:00:00.000Z`); `lastSeenAt`/`nextDueAt`/`lastOutcome` nullable; `familiarity`/`timesSeen`/`timesCorrect`/`timesIncorrect` non-null ints.
+- **`make test` / `make format` / `make lint`** before each commit. This project uses **XcodeGen** (`project.yml`, whole-folder sources); `make test` runs `xcodegen generate` first, so new files under `Lengua/` and `LenguaTests/` are auto-included — no `.pbxproj` step. The `.xcodeproj` is generated; do not commit it.
+- **No `Task.sleep` in tests.** Use synchronous test doubles.
+- Endpoint contract: `limit` 1–100 default 50; `cursor` opaque; `nextCursor == null` ends; timestamps ISO8601 with fractional ms + `Z`; `lastSeenAt`/`nextDueAt`/`lastOutcome` nullable; counts non-null ints.
+- **Shared vocab state is in-memory** (`InMemoryKey`), not file-backed.
 
 ---
 
@@ -31,11 +32,9 @@
 - Test: `LenguaTests/VocabItemTests.swift`
 
 **Interfaces:**
-- Produces: `struct VocabItem: Codable, Equatable, Sendable, Identifiable` with fields listed below; `extension JSONDecoder { static var lenguaISO8601: JSONDecoder { get } }` — a decoder that parses ISO8601 timestamps with or without fractional seconds and throws `DecodingError.dataCorrupted` otherwise.
+- Produces: `struct VocabItem: Codable, Equatable, Sendable, Identifiable`; `extension JSONDecoder { static var lenguaISO8601: JSONDecoder }`.
 
-- [ ] **Step 1: Write the failing decoding tests**
-
-Create `LenguaTests/VocabItemTests.swift`:
+- [ ] **Step 1: Write the failing decoding tests** — create `LenguaTests/VocabItemTests.swift`:
 
 ```swift
 import CustomDump
@@ -69,8 +68,7 @@ struct VocabItemTests {
     expectNoDifference(item.familiarity, 3)
     expectNoDifference(item.lastOutcome, "correct")
     expectNoDifference(item.timesSeen, 4)
-    expectNoDifference(
-      item.createdAt, Date(timeIntervalSince1970: 1_754_042_400))  // 2026-08-01T10:00:00Z
+    expectNoDifference(item.createdAt, Date(timeIntervalSince1970: 1_754_042_400))
   }
 
   @Test func decodesNullOptionalsAndZeroCounts() throws {
@@ -99,8 +97,7 @@ struct VocabItemTests {
         "sourceText": "cat", "targetText": "gato", "familiarity": 1,
         "lastSeenAt": null, "timesSeen": 0, "timesCorrect": 0,
         "timesIncorrect": 0, "lastOutcome": null, "nextDueAt": null,
-        "createdAt": "2026-08-01T10:00:00Z",
-        "updatedAt": "2026-08-01T10:00:00Z"
+        "createdAt": "2026-08-01T10:00:00Z", "updatedAt": "2026-08-01T10:00:00Z"
       }
       """)
     expectNoDifference(item.createdAt, Date(timeIntervalSince1970: 1_754_042_400))
@@ -123,14 +120,9 @@ struct VocabItemTests {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run tests to verify they fail** — `make test`. Expected: FAIL (types missing).
 
-Run: `make test`
-Expected: FAIL — `VocabItem` and `JSONDecoder.lenguaISO8601` do not exist (compile error).
-
-- [ ] **Step 3: Create the model**
-
-`Lengua/Models/VocabItem.swift`:
+- [ ] **Step 3: Create the model** — `Lengua/Models/VocabItem.swift`:
 
 ```swift
 import Foundation
@@ -152,9 +144,7 @@ struct VocabItem: Codable, Equatable, Sendable, Identifiable {
 }
 ```
 
-- [ ] **Step 4: Create the decoder**
-
-`Lengua/Extensions/JSONDecoder+Lengua.swift`:
+- [ ] **Step 4: Create the decoder** — `Lengua/Extensions/JSONDecoder+Lengua.swift`:
 
 ```swift
 import Foundation
@@ -191,10 +181,7 @@ extension JSONDecoder {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
-
-Run: `make format && make test`
-Expected: PASS (all four `VocabItemTests`).
+- [ ] **Step 5: Run tests to verify they pass** — `make format && make test`. Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -209,17 +196,15 @@ git commit -m "feat: add VocabItem model and fractional ISO8601 decoder"
 ### Task 2: `APIClient.getVocabItems` endpoint
 
 **Files:**
-- Modify: `Lengua/Core/API/APIClient.swift` (add `VocabItemsPage` + endpoint declaration)
-- Modify: `Lengua/Core/API/APIClient+Live.swift` (live implementation)
-- Test: `LenguaTests/APIClientTests.swift` (add cases)
+- Modify: `Lengua/Core/API/APIClient.swift`
+- Modify: `Lengua/Core/API/APIClient+Live.swift`
+- Test: `LenguaTests/APIClientTests.swift`
 
 **Interfaces:**
 - Consumes: `VocabItem`, `JSONDecoder.lenguaISO8601` (Task 1).
-- Produces: `struct VocabItemsPage: Equatable, Sendable { var items: [VocabItem]; var nextCursor: String? }`; `APIClient.getVocabItems: @Sendable (_ targetLanguageCode: String?, _ limit: Int?, _ cursor: String?) async throws -> VocabItemsPage`. Callers invoke positionally: `try await api.getVocabItems(nil, 100, cursor)`.
+- Produces: `struct VocabItemsPage: Equatable, Sendable { var items: [VocabItem]; var nextCursor: String? }`; `APIClient.getVocabItems: @Sendable (_ targetLanguageCode: String?, _ limit: Int?, _ cursor: String?) async throws -> VocabItemsPage` (call positionally: `api.getVocabItems(nil, 100, cursor)`); internal `struct VocabItemsResponse`.
 
-- [ ] **Step 1: Write the failing tests**
-
-Add to `LenguaTests/APIClientTests.swift` (inside the existing `APIClientTests` struct):
+- [ ] **Step 1: Write the failing tests** — add inside the existing `APIClientTests` struct in `LenguaTests/APIClientTests.swift`:
 
 ```swift
   @Test func getVocabItemsUsesInjectedDependency() async throws {
@@ -269,16 +254,9 @@ Add to `LenguaTests/APIClientTests.swift` (inside the existing `APIClientTests` 
   }
 ```
 
-> Note: `VocabItemsResponse` is created in Step 3 as an `internal` type so this test can reference it.
+- [ ] **Step 2: Run tests to verify they fail** — `make test`. Expected: FAIL (types missing).
 
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `make test`
-Expected: FAIL — `getVocabItems`, `VocabItemsPage`, `VocabItemsResponse` do not exist.
-
-- [ ] **Step 3: Declare the endpoint, page, and envelope**
-
-In `Lengua/Core/API/APIClient.swift`, add the endpoint to the `@DependencyClient struct APIClient` (after `signInViaGoogle`):
+- [ ] **Step 3: Declare endpoint, page, envelope** — in `Lengua/Core/API/APIClient.swift`, add to the `@DependencyClient struct APIClient` after `signInViaGoogle`:
 
 ```swift
   /// Fetches one page of the caller's vocab items (auth required).
@@ -289,7 +267,7 @@ In `Lengua/Core/API/APIClient.swift`, add the endpoint to the `@DependencyClient
   ) async throws -> VocabItemsPage
 ```
 
-Add these types near `GoogleSignInResult` in the same file:
+Add near `GoogleSignInResult`:
 
 ```swift
 struct VocabItemsPage: Equatable, Sendable {
@@ -308,9 +286,7 @@ struct VocabItemsResponse: Decodable {
 }
 ```
 
-- [ ] **Step 4: Implement the live endpoint**
-
-In `Lengua/Core/API/APIClient+Live.swift`, add `import Sharing` at the top, and add this closure to the `APIClient(...)` initializer (after `signInViaGoogle`, add a comma after the previous closure):
+- [ ] **Step 4: Implement the live endpoint** — in `Lengua/Core/API/APIClient+Live.swift`, add `import Sharing` at the top, then add this closure to the `APIClient(...)` initializer (comma after the previous `signInViaGoogle` closure):
 
 ```swift
       getVocabItems: { targetLanguageCode, limit, cursor in
@@ -345,10 +321,7 @@ In `Lengua/Core/API/APIClient+Live.swift`, add `import Sharing` at the top, and 
       }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
-
-Run: `make format && make test`
-Expected: PASS (both new `APIClientTests` cases, existing cases still green).
+- [ ] **Step 5: Run tests to verify they pass** — `make format && make test`. Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -360,38 +333,469 @@ git commit -m "feat: add getVocabItems API endpoint with bearer auth"
 
 ---
 
-### Task 3: Rename Deck tab → Library tab (placeholder)
-
-Pure rename so the app compiles and shows a "Library" tab; real logic lands in Task 4. This keeps the rename reviewable on its own.
+### Task 3: Shared `VocabItems` state + `VocabItemsClient`
 
 **Files:**
-- Delete: `Lengua/Views/Pages/DeckPage.swift`
-- Create: `Lengua/Views/Pages/LibraryPage.swift`
-- Modify: `Lengua/Views/Pages/MainContainer.swift` (enum case, titles/icons, TabView block)
-- Delete: `LenguaTests/DeckPageModelTests.swift`
-- Create: `LenguaTests/LibraryPageModelTests.swift` (converted to swift-testing)
-- Modify: `LenguaTests/MainContainerModelTests.swift` (convert to swift-testing + update Deck→Library)
+- Create: `Lengua/State/VocabItems.swift`
+- Modify: `Lengua/State/SharedUserDefaults.swift` (add `.vocabItems` key)
+- Create: `Lengua/Core/VocabItems/VocabItemsClient.swift`
+- Test: `LenguaTests/VocabItemsClientTests.swift`
 
-- [ ] **Step 1: Update the failing tests first**
+**Interfaces:**
+- Consumes: `VocabItem`, `APIClient.getVocabItems`, `@Shared(.auth)`.
+- Produces: `struct VocabItems: Equatable, Sendable { var items: IdentifiedArrayOf<VocabItem>; var isLoading: Bool; var loadFailed: Bool }`; `@Shared(.vocabItems)` in-memory key; `@DependencyClient struct VocabItemsClient: Sendable { var refresh: @Sendable () async -> Void; var clear: @Sendable () -> Void }`; `DependencyValues.vocabItemsClient`.
 
-Delete `LenguaTests/DeckPageModelTests.swift` (XCTest). Create `LenguaTests/LibraryPageModelTests.swift`:
+- [ ] **Step 1: Write the failing tests** — create `LenguaTests/VocabItemsClientTests.swift`:
 
 ```swift
+import ConcurrencyExtras
 import CustomDump
+import Dependencies
+import Foundation
+import IdentifiedCollections
+import Sharing
 import Testing
 
 @testable import Lengua
 
 @MainActor
-struct LibraryPageModelTests {
-  @Test func navigationTitleIsLibrary() {
-    let model = LibraryPageModel()
-    expectNoDifference(model.navigationTitle, "Library")
+@Suite(.serialized)
+struct VocabItemsClientTests {
+  private func item(id: String, familiarity: Int = 0) -> VocabItem {
+    VocabItem(
+      id: id, targetLanguageCode: "es", sourceText: "s", targetText: "t",
+      familiarity: familiarity, lastSeenAt: nil, timesSeen: 0, timesCorrect: 0,
+      timesIncorrect: 0, lastOutcome: nil, nextDueAt: nil,
+      createdAt: Date(timeIntervalSince1970: 0), updatedAt: Date(timeIntervalSince1970: 0))
+  }
+
+  @Test func refreshLoadsAllPagesIntoSharedState() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, cursor in
+        cursor == nil
+          ? VocabItemsPage(items: [self.item(id: "1")], nextCursor: "c2")
+          : VocabItemsPage(items: [self.item(id: "2")], nextCursor: nil)
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()
+
+      expectNoDifference(vocabItems.items.map(\.id), ["1", "2"])
+      expectNoDifference(vocabItems.isLoading, false)
+      expectNoDifference(vocabItems.loadFailed, false)
+    }
+  }
+
+  @Test func refreshFailureSetsLoadFailed() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in throw APIError.dataNotValid }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()
+
+      expectNoDifference(vocabItems.loadFailed, true)
+      expectNoDifference(vocabItems.isLoading, false)
+      expectNoDifference(vocabItems.items.isEmpty, true)
+    }
+  }
+
+  @Test func refreshCancellationDoesNotSetLoadFailed() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in throw CancellationError() }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()
+
+      expectNoDifference(vocabItems.loadFailed, false)
+      expectNoDifference(vocabItems.isLoading, false)
+    }
+  }
+
+  @Test func refreshDiscardsResultsIfSignedOutMidLoad() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in
+        @Shared(.auth) var auth
+        $auth.withLock { $0 = Auth() }  // sign out during the load
+        return VocabItemsPage(items: [self.item(id: "1")], nextCursor: nil)
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()
+
+      expectNoDifference(vocabItems.items.isEmpty, true)
+      expectNoDifference(vocabItems.isLoading, false)
+    }
+  }
+
+  @Test func refreshIsCoalescedWhileAlreadyLoading() async {
+    let callCount = LockIsolated(0)
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in
+        callCount.withValue { $0 += 1 }
+        return VocabItemsPage(items: [self.item(id: "1")], nextCursor: nil)
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems(isLoading: true)  // pretend a load is in flight
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()  // should no-op because isLoading == true
+
+      expectNoDifference(callCount.value, 0)
+    }
+  }
+
+  @Test func clearResetsSharedState() {
+    withDependencies {
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.vocabItems) var vocabItems = VocabItems(
+        items: [item(id: "1")], isLoading: true, loadFailed: true)
+      @Dependency(\.vocabItemsClient) var client
+
+      client.clear()
+
+      expectNoDifference(vocabItems, VocabItems())
+    }
   }
 }
 ```
 
-Rewrite `LenguaTests/MainContainerModelTests.swift` as swift-testing with Library in place of Deck:
+> `VocabItems` must expose a memberwise init with defaults so tests can build `VocabItems(isLoading: true)` etc. A plain struct with default values on every stored property gives this automatically.
+
+- [ ] **Step 2: Run tests to verify they fail** — `make test`. Expected: FAIL (types missing).
+
+- [ ] **Step 3: Create the shared state struct** — `Lengua/State/VocabItems.swift`:
+
+```swift
+import Foundation
+import IdentifiedCollections
+
+/// App-wide vocab items plus their load status. In-memory shared state
+/// (`@Shared(.vocabItems)`); the server is the source of truth.
+struct VocabItems: Equatable, Sendable {
+  var items: IdentifiedArrayOf<VocabItem> = []
+  var isLoading = false
+  var loadFailed = false
+}
+```
+
+- [ ] **Step 4: Register the shared key** — in `Lengua/State/SharedUserDefaults.swift`, add:
+
+```swift
+extension SharedKey where Self == InMemoryKey<VocabItems>.Default {
+  static var vocabItems: Self {
+    Self[.inMemory("vocabItems"), default: VocabItems()]
+  }
+}
+```
+
+- [ ] **Step 5: Create the client** — `Lengua/Core/VocabItems/VocabItemsClient.swift`:
+
+```swift
+import Dependencies
+import DependenciesMacros
+import IdentifiedCollections
+import Sharing
+
+@DependencyClient
+struct VocabItemsClient: Sendable {
+  /// Loads every page of the caller's vocab items into `@Shared(.vocabItems)`.
+  /// Coalesced: a call while a load is already running is a no-op.
+  var refresh: @Sendable () async -> Void
+  /// Resets `@Shared(.vocabItems)` to empty (used on sign-out).
+  var clear: @Sendable () -> Void
+}
+
+extension VocabItemsClient: DependencyKey {
+  static let liveValue = VocabItemsClient(
+    refresh: {
+      @Shared(.vocabItems) var vocabItems
+      let shouldStart = $vocabItems.withLock { state -> Bool in
+        guard !state.isLoading else { return false }
+        state.isLoading = true
+        state.loadFailed = false
+        return true
+      }
+      guard shouldStart else { return }
+
+      @Dependency(\.api) var api
+      do {
+        var loaded: [VocabItem] = []
+        var cursor: String?
+        repeat {
+          let page = try await api.getVocabItems(nil, 100, cursor)
+          loaded.append(contentsOf: page.items)
+          cursor = page.nextCursor
+        } while cursor != nil
+
+        @Shared(.auth) var auth
+        $vocabItems.withLock { state in
+          if auth.isLoggedIn {  // a sign-out mid-load must not repopulate
+            state.items = IdentifiedArray(uniqueElements: loaded)
+          }
+          state.isLoading = false
+        }
+      } catch is CancellationError {
+        $vocabItems.withLock { $0.isLoading = false }
+      } catch {
+        $vocabItems.withLock { state in
+          state.isLoading = false
+          state.loadFailed = true
+        }
+      }
+    },
+    clear: {
+      @Shared(.vocabItems) var vocabItems
+      $vocabItems.withLock { $0 = VocabItems() }
+    }
+  )
+}
+
+extension DependencyValues {
+  var vocabItemsClient: VocabItemsClient {
+    get { self[VocabItemsClient.self] }
+    set { self[VocabItemsClient.self] = newValue }
+  }
+}
+```
+
+- [ ] **Step 6: Run tests to verify they pass** — `make format && make test`. Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+make lint
+git add Lengua/State/VocabItems.swift Lengua/State/SharedUserDefaults.swift \
+  Lengua/Core/VocabItems/VocabItemsClient.swift LenguaTests/VocabItemsClientTests.swift
+git commit -m "feat: add shared VocabItems state and VocabItemsClient"
+```
+
+---
+
+### Task 4: `ContentViewModel` — sign-in / foreground / sign-out lifecycle
+
+**Files:**
+- Modify: `Lengua/Views/Pages/ContentView.swift` (add model + wiring)
+- Test: `LenguaTests/ContentViewModelTests.swift`
+
+**Interfaces:**
+- Consumes: `VocabItemsClient` (Task 3), `@Shared(.auth)`.
+- Produces: `@MainActor @Observable final class ContentViewModel: ViewModel` with `var isLoggedIn: Bool`, `func authStateChanged() async`, `func appEnteredForeground() async`.
+
+- [ ] **Step 1: Write the failing tests** — create `LenguaTests/ContentViewModelTests.swift`:
+
+```swift
+import ConcurrencyExtras
+import CustomDump
+import Dependencies
+import Sharing
+import Testing
+
+@testable import Lengua
+
+@MainActor
+@Suite(.serialized)
+struct ContentViewModelTests {
+  @Test func authStateChangedRefreshesWhenLoggedIn() async {
+    let refreshes = LockIsolated(0)
+    let clears = LockIsolated(0)
+    let model = withDependencies {
+      $0.vocabItemsClient.refresh = { refreshes.withValue { $0 += 1 } }
+      $0.vocabItemsClient.clear = { clears.withValue { $0 += 1 } }
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      return ContentViewModel()
+    }
+
+    await model.authStateChanged()
+
+    expectNoDifference(refreshes.value, 1)
+    expectNoDifference(clears.value, 0)
+  }
+
+  @Test func authStateChangedClearsWhenLoggedOut() async {
+    let refreshes = LockIsolated(0)
+    let clears = LockIsolated(0)
+    let model = withDependencies {
+      $0.vocabItemsClient.refresh = { refreshes.withValue { $0 += 1 } }
+      $0.vocabItemsClient.clear = { clears.withValue { $0 += 1 } }
+    } operation: {
+      @Shared(.auth) var auth = Auth()
+      return ContentViewModel()
+    }
+
+    await model.authStateChanged()
+
+    expectNoDifference(clears.value, 1)
+    expectNoDifference(refreshes.value, 0)
+  }
+
+  @Test func foregroundRefreshesWhenLoggedIn() async {
+    let refreshes = LockIsolated(0)
+    let model = withDependencies {
+      $0.vocabItemsClient.refresh = { refreshes.withValue { $0 += 1 } }
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      return ContentViewModel()
+    }
+
+    await model.appEnteredForeground()
+
+    expectNoDifference(refreshes.value, 1)
+  }
+
+  @Test func foregroundIsNoOpWhenLoggedOut() async {
+    let refreshes = LockIsolated(0)
+    let model = withDependencies {
+      $0.vocabItemsClient.refresh = { refreshes.withValue { $0 += 1 } }
+    } operation: {
+      @Shared(.auth) var auth = Auth()
+      return ContentViewModel()
+    }
+
+    await model.appEnteredForeground()
+
+    expectNoDifference(refreshes.value, 0)
+  }
+
+  @Test func isLoggedInReflectsAuth() {
+    @Shared(.auth) var auth = Auth(jwtToken: "t")
+    expectNoDifference(ContentViewModel().isLoggedIn, true)
+  }
+}
+```
+
+- [ ] **Step 2: Run tests to verify they fail** — `make test`. Expected: FAIL (`ContentViewModel` missing).
+
+- [ ] **Step 3: Add the model + wire ContentView** — replace `Lengua/Views/Pages/ContentView.swift` with:
+
+```swift
+import Dependencies
+import Sharing
+import SwiftUI
+
+@MainActor
+@Observable
+final class ContentViewModel: ViewModel {
+
+  // MARK: - Dependencies
+  @ObservationIgnored @Dependency(\.vocabItemsClient) var vocabItemsClient
+
+  // MARK: - Shared State
+  @ObservationIgnored @Shared(.auth) var auth
+
+  // MARK: - Initialization
+  override init() { super.init() }
+
+  // MARK: - View Helpers
+  var isLoggedIn: Bool { auth.isLoggedIn }
+
+  // MARK: - User Actions
+  func authStateChanged() async {
+    if auth.isLoggedIn {
+      await vocabItemsClient.refresh()
+    } else {
+      vocabItemsClient.clear()
+    }
+  }
+
+  func appEnteredForeground() async {
+    guard auth.isLoggedIn else { return }
+    await vocabItemsClient.refresh()
+  }
+}
+
+@MainActor
+struct ContentView: View {
+  @State var model = ContentViewModel()
+  @Environment(\.scenePhase) private var scenePhase
+
+  var mainContainerModel = MainContainerModel()
+  var signInModel = SignInPageModel()
+
+  var body: some View {
+    Group {
+      if model.isLoggedIn {
+        MainContainer(model: mainContainerModel)
+      } else {
+        SignInPage(model: signInModel)
+      }
+    }
+    .translatorHost()
+    .task(id: model.isLoggedIn) { await model.authStateChanged() }
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active {
+        Task { await model.appEnteredForeground() }
+      }
+    }
+  }
+}
+```
+
+> `ContentView` previously read `@Shared(.auth)` directly and had no `@State`. The model now owns auth; keep `mainContainerModel` / `signInModel` as before. `.task(id: model.isLoggedIn)` re-runs whenever login state flips (sign-in load, sign-out clear) and on first appear (cold-launch load).
+
+- [ ] **Step 4: Run tests to verify they pass** — `make format && make test`. Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+make lint
+git add Lengua/Views/Pages/ContentView.swift LenguaTests/ContentViewModelTests.swift
+git commit -m "feat: load vocab items on sign-in and foreground, clear on sign-out"
+```
+
+---
+
+### Task 5: Rename Deck tab → Library tab (placeholder)
+
+Pure rename so the app compiles and shows a "Library" tab; real logic lands in Task 6.
+
+**Files:**
+- Delete: `Lengua/Views/Pages/DeckPage.swift`
+- Create: `Lengua/Views/Pages/LibraryPage.swift`
+- Modify: `Lengua/Views/Pages/MainContainer.swift`
+- Delete: `LenguaTests/DeckPageModelTests.swift`
+- Create: `LenguaTests/LibraryPageModelTests.swift`
+- Modify: `LenguaTests/MainContainerModelTests.swift`
+
+- [ ] **Step 1: Update the tests first** — delete `LenguaTests/DeckPageModelTests.swift`. Create `LenguaTests/LibraryPageModelTests.swift`:
+
+```swift
+import CustomDump
+import Sharing
+import Testing
+
+@testable import Lengua
+
+@MainActor
+@Suite(.serialized)
+struct LibraryPageModelTests {
+  @Test func navigationTitleIsLibrary() {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    expectNoDifference(LibraryPageModel().navigationTitle, "Library")
+  }
+}
+```
+
+Rewrite `LenguaTests/MainContainerModelTests.swift` as swift-testing with Library:
 
 ```swift
 import CustomDump
@@ -427,14 +831,9 @@ struct MainContainerModelTests {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Run tests to verify they fail** — `make test`. Expected: FAIL.
 
-Run: `make test`
-Expected: FAIL — `LibraryPageModel`, `.library`, `libraryTabTitle`, `libraryTabIconName` do not exist.
-
-- [ ] **Step 3: Create the placeholder LibraryPage**
-
-Delete `Lengua/Views/Pages/DeckPage.swift`. Create `Lengua/Views/Pages/LibraryPage.swift`:
+- [ ] **Step 3: Create the placeholder LibraryPage** — delete `Lengua/Views/Pages/DeckPage.swift`. Create `Lengua/Views/Pages/LibraryPage.swift`:
 
 ```swift
 import SwiftUI
@@ -461,20 +860,14 @@ struct LibraryPage: View {
 }
 ```
 
-- [ ] **Step 4: Rewire the tab in MainContainer**
-
-In `Lengua/Views/Pages/MainContainer.swift`:
-
-Rename the enum case (line 9): `case deck` → `case library`.
-
-Replace the title/icon lines (17-18):
+- [ ] **Step 4: Rewire the tab** — in `Lengua/Views/Pages/MainContainer.swift`: rename enum case `case deck` → `case library`; replace lines 17-18 with:
 
 ```swift
   var libraryTabTitle: String { "Library" }
   var libraryTabIconName: String { "books.vertical" }
 ```
 
-Replace the Deck `TabView` block (lines 41-45):
+Replace the Deck `TabView` block:
 
 ```swift
       NavigationStack {
@@ -484,10 +877,7 @@ Replace the Deck `TabView` block (lines 41-45):
       .tag(MainContainerModel.ActiveTab.library)
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
-
-Run: `make format && make test`
-Expected: PASS. App compiles; tab shows "Library".
+- [ ] **Step 5: Run tests to verify they pass** — `make format && make test`. Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -501,31 +891,30 @@ git commit -m "refactor: rename Deck tab to Library placeholder"
 
 ---
 
-### Task 4: `LibraryPageModel` — load-all + sorting + state
+### Task 6: `LibraryPageModel` — read shared state, sort, retry
 
 **Files:**
 - Modify: `Lengua/Views/Pages/LibraryPage.swift` (flesh out the model)
-- Modify: `Lengua/Views/Reusable Components/LenguaAlert.swift` (add `vocabItemsLoadFailed`)
-- Modify: `LenguaTests/LibraryPageModelTests.swift` (full coverage)
+- Test: `LenguaTests/LibraryPageModelTests.swift` (full coverage)
 
 **Interfaces:**
-- Consumes: `APIClient.getVocabItems` (Task 2), `VocabItem`, `VocabItemsPage`, `LenguaAlert`.
-- Produces on `LibraryPageModel`: `items: IdentifiedArrayOf<VocabItem>`, `isLoading: Bool`, `loadDidError: Bool`, `sortMode: SortMode`, `presentedAlert: LenguaAlert?`, `sortedItems: [VocabItem]`, `showsRetry: Bool`, `isEmptyStateVisible: Bool`, `familiarityMaxLevel: Int`, `func familiarityLevel(for:) -> Int`, `func sortModeLabel(_:) -> String`, `sortMenuTitle`, `emptyStateText`, `retryButtonTitle`, `navigationTitle`; `func viewAppeared() async`, `func retryButtonTapped() async`; `enum SortMode: String, CaseIterable, Sendable { case date, alphabetical, familiarity }`.
+- Consumes: `@Shared(.vocabItems)`, `VocabItemsClient.refresh`, `VocabItem`.
+- Produces on `LibraryPageModel`: `sortMode: SortMode`; derived `sortedItems: [VocabItem]`, `isLoading: Bool`, `isEmptyStateVisible: Bool`, `showsRetry: Bool`; `familiarityMaxLevel: Int`, `func familiarityLevel(for:) -> Int`, `func sortModeLabel(_:) -> String`, `sortModes: [SortMode]`, `navigationTitle`, `emptyStateText`, `retryButtonTitle`, `sortMenuTitle`; `func retryButtonTapped() async`; `enum SortMode: String, CaseIterable, Sendable { case date, alphabetical, familiarity }`.
 
-- [ ] **Step 1: Write the failing tests**
-
-Replace the body of `LenguaTests/LibraryPageModelTests.swift`:
+- [ ] **Step 1: Write the failing tests** — replace the body of `LenguaTests/LibraryPageModelTests.swift`:
 
 ```swift
 import ConcurrencyExtras
 import CustomDump
 import Dependencies
 import Foundation
+import Sharing
 import Testing
 
 @testable import Lengua
 
 @MainActor
+@Suite(.serialized)
 struct LibraryPageModelTests {
   private func item(
     id: String, target: String = "x", source: String = "y",
@@ -540,148 +929,78 @@ struct LibraryPageModelTests {
   }
 
   @Test func navigationTitleIsLibrary() {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
     expectNoDifference(LibraryPageModel().navigationTitle, "Library")
   }
 
-  @Test func loadsAllPagesFollowingCursor() async {
-    let model = withDependencies {
-      $0.api.getVocabItems = { _, _, cursor in
-        switch cursor {
-        case nil: return VocabItemsPage(items: [item(id: "1")], nextCursor: "c2")
-        case "c2": return VocabItemsPage(items: [item(id: "2")], nextCursor: "c3")
-        default: return VocabItemsPage(items: [item(id: "3")], nextCursor: nil)
-        }
-      }
-    } operation: { LibraryPageModel() }
-
-    await model.viewAppeared()
-
-    expectNoDifference(model.items.map(\.id), ["1", "2", "3"])
-    expectNoDifference(model.isLoading, false)
-    expectNoDifference(model.loadDidError, false)
+  @Test func readsLoadingFromSharedState() {
+    @Shared(.vocabItems) var vocabItems = VocabItems(isLoading: true)
+    expectNoDifference(LibraryPageModel().isLoading, true)
   }
 
-  @Test func emptyListShowsEmptyStateNoError() async {
-    let model = withDependencies {
-      $0.api.getVocabItems = { _, _, _ in VocabItemsPage(items: [], nextCursor: nil) }
-    } operation: { LibraryPageModel() }
-
-    await model.viewAppeared()
-
-    expectNoDifference(model.items.isEmpty, true)
+  @Test func emptyStateVisibleWhenLoadedAndEmpty() {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    let model = LibraryPageModel()
     expectNoDifference(model.isEmptyStateVisible, true)
-    expectNoDifference(model.presentedAlert, nil)
+    expectNoDifference(model.showsRetry, false)
   }
 
-  @Test func loadFailureSetsAlertAndRetry() async {
-    let model = withDependencies {
-      $0.api.getVocabItems = { _, _, _ in throw APIError.dataNotValid }
-    } operation: { LibraryPageModel() }
-
-    await model.viewAppeared()
-
-    expectNoDifference(model.presentedAlert, .vocabItemsLoadFailed)
-    expectNoDifference(model.loadDidError, true)
+  @Test func retryVisibleOnFailureWithNoItems() {
+    @Shared(.vocabItems) var vocabItems = VocabItems(loadFailed: true)
+    let model = LibraryPageModel()
     expectNoDifference(model.showsRetry, true)
+    expectNoDifference(model.isEmptyStateVisible, false)
   }
 
-  @Test func retryReloadsAfterFailure() async {
-    let shouldFail = LockIsolated(true)
+  @Test func retryButtonTappedCallsRefresh() async {
+    let refreshes = LockIsolated(0)
     let model = withDependencies {
-      $0.api.getVocabItems = { _, _, _ in
-        if shouldFail.value { throw APIError.dataNotValid }
-        return VocabItemsPage(items: [item(id: "1")], nextCursor: nil)
-      }
-    } operation: { LibraryPageModel() }
+      $0.vocabItemsClient.refresh = { refreshes.withValue { $0 += 1 } }
+    } operation: {
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      return LibraryPageModel()
+    }
 
-    await model.viewAppeared()
-    expectNoDifference(model.loadDidError, true)
-
-    shouldFail.setValue(false)
     await model.retryButtonTapped()
 
-    expectNoDifference(model.items.map(\.id), ["1"])
-    expectNoDifference(model.loadDidError, false)
+    expectNoDifference(refreshes.value, 1)
   }
 
-  @Test func viewAppearedLoadsOnlyOnce() async {
-    let calls = LockIsolated(0)
-    let model = withDependencies {
-      $0.api.getVocabItems = { _, _, _ in
-        calls.withValue { $0 += 1 }
-        return VocabItemsPage(items: [item(id: "1")], nextCursor: nil)
-      }
-    } operation: { LibraryPageModel() }
-
-    await model.viewAppeared()
-    await model.viewAppeared()
-
-    expectNoDifference(calls.value, 1)
-  }
-
-  @Test func cancellationDoesNotAlert() async {
-    let model = withDependencies {
-      $0.api.getVocabItems = { _, _, _ in throw CancellationError() }
-    } operation: { LibraryPageModel() }
-
-    await model.viewAppeared()
-
-    expectNoDifference(model.presentedAlert, nil)
-    expectNoDifference(model.loadDidError, false)
-  }
-
-  @Test func alphabeticalSortIsCaseInsensitiveByTargetText() async {
-    let model = withDependencies {
-      $0.api.getVocabItems = { _, _, _ in
-        VocabItemsPage(
-          items: [
-            item(id: "1", target: "banana"), item(id: "2", target: "Apple"),
-            item(id: "3", target: "cherry"),
-          ], nextCursor: nil)
-      }
-    } operation: { LibraryPageModel() }
-
-    await model.viewAppeared()
+  @Test func alphabeticalSortIsCaseInsensitiveByTargetText() {
+    @Shared(.vocabItems) var vocabItems = VocabItems(
+      items: [
+        item(id: "1", target: "banana"), item(id: "2", target: "Apple"),
+        item(id: "3", target: "cherry"),
+      ])
+    let model = LibraryPageModel()
     model.sortMode = .alphabetical
-
     expectNoDifference(model.sortedItems.map(\.targetText), ["Apple", "banana", "cherry"])
   }
 
-  @Test func dateSortIsNewestFirst() async {
-    let model = withDependencies {
-      $0.api.getVocabItems = { _, _, _ in
-        VocabItemsPage(
-          items: [
-            item(id: "old", created: 100), item(id: "new", created: 300),
-            item(id: "mid", created: 200),
-          ], nextCursor: nil)
-      }
-    } operation: { LibraryPageModel() }
-
-    await model.viewAppeared()
+  @Test func dateSortIsNewestFirst() {
+    @Shared(.vocabItems) var vocabItems = VocabItems(
+      items: [
+        item(id: "old", created: 100), item(id: "new", created: 300),
+        item(id: "mid", created: 200),
+      ])
+    let model = LibraryPageModel()
     model.sortMode = .date
-
     expectNoDifference(model.sortedItems.map(\.id), ["new", "mid", "old"])
   }
 
-  @Test func familiaritySortIsAscending() async {
-    let model = withDependencies {
-      $0.api.getVocabItems = { _, _, _ in
-        VocabItemsPage(
-          items: [
-            item(id: "known", familiarity: 5), item(id: "new", familiarity: 0),
-            item(id: "learning", familiarity: 2),
-          ], nextCursor: nil)
-      }
-    } operation: { LibraryPageModel() }
-
-    await model.viewAppeared()
+  @Test func familiaritySortIsAscending() {
+    @Shared(.vocabItems) var vocabItems = VocabItems(
+      items: [
+        item(id: "known", familiarity: 5), item(id: "new", familiarity: 0),
+        item(id: "learning", familiarity: 2),
+      ])
+    let model = LibraryPageModel()
     model.sortMode = .familiarity
-
     expectNoDifference(model.sortedItems.map(\.id), ["new", "learning", "known"])
   }
 
   @Test func familiarityLevelClampsToRange() {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
     let model = LibraryPageModel()
     expectNoDifference(model.familiarityMaxLevel, 5)
     expectNoDifference(model.familiarityLevel(for: item(id: "a", familiarity: 3)), 3)
@@ -691,32 +1010,13 @@ struct LibraryPageModelTests {
 }
 ```
 
-`LockIsolated` comes from `ConcurrencyExtras` (linked to the test target as `link: false`), matching `TranslatePageModelTests.swift`. Do **not** `import IdentifiedCollections` here — it is not a test-target dependency; `model.items` is reachable through `@testable import Lengua` and the tests only read it.
+- [ ] **Step 2: Run tests to verify they fail** — `make test`. Expected: FAIL (members missing).
 
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `make test`
-Expected: FAIL — new members and `.vocabItemsLoadFailed` do not exist.
-
-- [ ] **Step 3: Add the alert**
-
-In `Lengua/Views/Reusable Components/LenguaAlert.swift`, add inside the `extension LenguaAlert`:
-
-```swift
-  static var vocabItemsLoadFailed: LenguaAlert {
-    LenguaAlert(
-      title: "Couldn't Load Your Library",
-      message: "We couldn't load your vocab items just now. Check your connection and try again.")
-  }
-```
-
-- [ ] **Step 4: Implement the model**
-
-Replace the `LibraryPageModel` class in `Lengua/Views/Pages/LibraryPage.swift` (keep the `LibraryPage` view untouched for now) with:
+- [ ] **Step 3: Implement the model** — replace the `LibraryPageModel` class in `Lengua/Views/Pages/LibraryPage.swift` (leave the `LibraryPage` view for Task 7):
 
 ```swift
 import Dependencies
-import IdentifiedCollections
+import Sharing
 import SwiftUI
 
 @MainActor
@@ -724,19 +1024,16 @@ import SwiftUI
 final class LibraryPageModel: ViewModel {
 
   // MARK: - Dependencies
-  @ObservationIgnored @Dependency(\.api) var api
+  @ObservationIgnored @Dependency(\.vocabItemsClient) var vocabItemsClient
+
+  // MARK: - Shared State
+  @ObservationIgnored @Shared(.vocabItems) var vocabItems
 
   // MARK: - Initialization
   override init() { super.init() }
 
   // MARK: - Properties
-  var items: IdentifiedArrayOf<VocabItem> = []
-  var isLoading = false
-  var loadDidError = false
   var sortMode: SortMode = .date
-  var presentedAlert: LenguaAlert?
-
-  @ObservationIgnored private var hasLoaded = false
 
   enum SortMode: String, CaseIterable, Sendable {
     case date
@@ -745,33 +1042,8 @@ final class LibraryPageModel: ViewModel {
   }
 
   // MARK: - User Actions
-  func viewAppeared() async {
-    guard !hasLoaded, !isLoading else { return }
-    hasLoaded = true
-    isLoading = true
-    loadDidError = false
-    defer { isLoading = false }
-
-    do {
-      var loaded: [VocabItem] = []
-      var cursor: String?
-      repeat {
-        let page = try await api.getVocabItems(nil, 100, cursor)
-        loaded.append(contentsOf: page.items)
-        cursor = page.nextCursor
-      } while cursor != nil
-      items = IdentifiedArray(uniqueElements: loaded)
-    } catch is CancellationError {
-      hasLoaded = false  // allow a fresh load next time the tab appears
-    } catch {
-      hasLoaded = false  // allow retry
-      loadDidError = true
-      presentedAlert = .vocabItemsLoadFailed
-    }
-  }
-
   func retryButtonTapped() async {
-    await viewAppeared()
+    await vocabItemsClient.refresh()
   }
 
   // MARK: - View Helpers
@@ -790,8 +1062,11 @@ final class LibraryPageModel: ViewModel {
     }
   }
 
-  var isEmptyStateVisible: Bool { !isLoading && !loadDidError && items.isEmpty }
-  var showsRetry: Bool { loadDidError && items.isEmpty }
+  var isLoading: Bool { vocabItems.isLoading }
+  var isEmptyStateVisible: Bool {
+    !vocabItems.isLoading && !vocabItems.loadFailed && vocabItems.items.isEmpty
+  }
+  var showsRetry: Bool { vocabItems.loadFailed && vocabItems.items.isEmpty }
 
   let familiarityMaxLevel = 5
 
@@ -802,11 +1077,11 @@ final class LibraryPageModel: ViewModel {
   var sortedItems: [VocabItem] {
     switch sortMode {
     case .date:
-      return items.sorted { lhs, rhs in
+      return vocabItems.items.sorted { lhs, rhs in
         lhs.createdAt != rhs.createdAt ? lhs.createdAt > rhs.createdAt : lhs.id > rhs.id
       }
     case .alphabetical:
-      return items.sorted { lhs, rhs in
+      return vocabItems.items.sorted { lhs, rhs in
         let byTarget = lhs.targetText.localizedCaseInsensitiveCompare(rhs.targetText)
         if byTarget != .orderedSame { return byTarget == .orderedAscending }
         let bySource = lhs.sourceText.localizedCaseInsensitiveCompare(rhs.sourceText)
@@ -814,7 +1089,7 @@ final class LibraryPageModel: ViewModel {
         return lhs.id < rhs.id
       }
     case .familiarity:
-      return items.sorted { lhs, rhs in
+      return vocabItems.items.sorted { lhs, rhs in
         lhs.familiarity != rhs.familiarity
           ? lhs.familiarity < rhs.familiarity
           : lhs.createdAt > rhs.createdAt
@@ -824,35 +1099,28 @@ final class LibraryPageModel: ViewModel {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [ ] **Step 4: Run tests to verify they pass** — `make format && make test`. Expected: PASS.
 
-Run: `make format && make test`
-Expected: PASS (all `LibraryPageModelTests`).
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 make lint
-git add Lengua/Views/Pages/LibraryPage.swift \
-  "Lengua/Views/Reusable Components/LenguaAlert.swift" \
-  LenguaTests/LibraryPageModelTests.swift
-git commit -m "feat: implement LibraryPageModel load-all and sorting"
+git add Lengua/Views/Pages/LibraryPage.swift LenguaTests/LibraryPageModelTests.swift
+git commit -m "feat: LibraryPageModel reads shared vocab state and sorts"
 ```
 
 ---
 
-### Task 5: `LibraryPage` view — list, familiarity dots, sort control
+### Task 7: `LibraryPage` view — list, familiarity dots, sort control
 
 **Files:**
 - Modify: `Lengua/Views/Pages/LibraryPage.swift` (replace the placeholder view)
 
 **Interfaces:**
-- Consumes: every `LibraryPageModel` view helper from Task 4.
-- Produces: the finished `LibraryPage` view. No new testable Swift API (SwiftUI layout; covered by the model tests + manual/preview verification).
+- Consumes: every `LibraryPageModel` view helper from Task 6.
+- Produces: the finished `LibraryPage` view. No new testable Swift API.
 
-- [ ] **Step 1: Replace the view**
-
-Replace the `LibraryPage` struct in `Lengua/Views/Pages/LibraryPage.swift` with:
+- [ ] **Step 1: Replace the view** — replace the `LibraryPage` struct in `Lengua/Views/Pages/LibraryPage.swift` with:
 
 ```swift
 struct LibraryPage: View {
@@ -891,8 +1159,6 @@ struct LibraryPage: View {
         }
       }
     }
-    .lenguaAlert($model.presentedAlert)
-    .task { await model.viewAppeared() }
   }
 }
 
@@ -935,14 +1201,11 @@ private struct RetryState: View {
 }
 ```
 
-- [ ] **Step 2: Build and run the test suite**
+> No load-on-appear: the list reflects `@Shared(.vocabItems)`, which the lifecycle (Task 4) keeps fresh. Retry is the only load the view triggers.
 
-Run: `make format && make test`
-Expected: PASS (compiles; model tests still green).
+- [ ] **Step 2: Build and run the suite** — `make format && make test`. Expected: PASS (compiles; model tests green).
 
-- [ ] **Step 3: Manual verification**
-
-Launch the app (see the `run` skill / Xcode). Confirm: the tab bar shows a "Library" tab with the books icon; opening it loads items (or shows the empty/retry state); the Sort menu switches ordering; each row shows target over source with familiarity dots.
+- [ ] **Step 3: Manual verification** — launch the app. Confirm the tab bar shows "Library" with the books icon; after sign-in / on foreground the list populates (or shows empty/retry); the Sort menu reorders; each row shows target over source with familiarity dots.
 
 - [ ] **Step 4: Commit**
 
@@ -957,18 +1220,18 @@ git commit -m "feat: build Library list view with familiarity dots and sort cont
 ## Self-Review
 
 **Spec coverage:**
-- VocabItem model + optionals/ints → Task 1. ✅
-- Fractional ISO8601 date decoding (+ fallback, null, unparseable) → Task 1. ✅
-- Thin single-page `getVocabItems` + `VocabItemsPage` struct + bearer auth + envelope decode → Task 2. ✅
-- Load-all loop (limit 100, follow cursor, assign once), re-entrancy guard, cancellation-not-alerted, error alert + retry → Task 4. ✅
-- Three sort modes with tie-breaks + defaults (Date newest-first default; Familiarity ascending) → Task 4. ✅
-- Row layout target/source + familiarity dots, sort control, loading/empty/retry states → Task 5. ✅
-- Tab rename Deck→Library (case, title "Library", icon `books.vertical`, wiring) + XCTest→swift-testing conversions → Task 3. ✅
-- No language filter (pass nil, param retained) → Tasks 2 & 4. ✅
+- VocabItem model + optionals/ints, fractional/plain/null/unparseable date decoding → Task 1. ✅
+- Thin single-page `getVocabItems` + `VocabItemsPage` + bearer auth + envelope decode → Task 2. ✅
+- Shared in-memory `VocabItems` state + `@Shared(.vocabItems)` + `VocabItemsClient` (load-all, coalescing, error→loadFailed, cancellation, sign-out-mid-load discard, clear) → Task 3. ✅
+- Load on sign-in + foreground, clear on sign-out via `ContentViewModel` + `.task(id:)` + scenePhase → Task 4. ✅
+- Deck→Library rename (case, title "Library", icon `books.vertical`) + XCTest→swift-testing conversions → Task 5. ✅
+- LibraryPageModel reads shared state, three sorts with tie-breaks + defaults, derived loading/empty/retry, retry→refresh, familiarity dots helpers → Task 6. ✅
+- List view with target/source + dots, sort control, loading/empty/retry overlays, no load-on-appear → Task 7. ✅
+- No language filter (pass nil, param retained) → Tasks 2 & 3. ✅
 - Read-only, no detail view → no tap handler anywhere. ✅
 
-**Placeholder scan:** No TBD/TODO steps; every code step has full code. ✅
+**Placeholder scan:** No TBD/TODO; every code step has full code. ✅
 
-**Type consistency:** `getVocabItems(_ targetLanguageCode:_ limit:_ cursor:)` returns `VocabItemsPage` everywhere; `SortMode` cases `date`/`alphabetical`/`familiarity` consistent across model + tests; `familiarityMaxLevel`/`familiarityLevel(for:)` names match between model and Task 5 view. ✅
+**Type consistency:** `getVocabItems(_:_:_:) -> VocabItemsPage`; `VocabItems { items, isLoading, loadFailed }` used identically across Task 3 client, Task 6 model, and all tests; `vocabItemsClient.refresh`/`.clear` names match across Tasks 3/4/6; `SortMode` cases + `familiarityMaxLevel`/`familiarityLevel(for:)` consistent between Task 6 model and Task 7 view. ✅
 
-**Note for the executor:** This project uses **XcodeGen** (`project.yml`, targets source whole folders `Lengua` / `LenguaTests`). `make test` runs `xcodegen generate` first, so new files under those folders are picked up automatically — no manual `.pbxproj` / target-membership step. The `.xcodeproj` is gitignored/generated; do not commit it.
+**Ordering:** Task 3 (client) precedes Tasks 4 & 6 that consume it; Task 5 rename precedes Task 6's model fill-in; each task compiles and is independently testable.

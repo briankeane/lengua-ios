@@ -7,21 +7,31 @@
 
 Replace the placeholder "Deck" tab with a real "Library" tab that lists **all**
 of the user's vocab items, sortable **alphabetically**, **by date**, and **by
-familiarity** (0–5). Read-only for v1.
+familiarity** (0–5). Read-only for v1. Vocab items are **app-wide shared state**
+that any screen can read and edit.
 
 ## Locked product decisions
 
-1. **Load all, sort client-side.** On open, page through the endpoint following
-   `nextCursor` until it is `null`, hold every item in memory, and perform all
-   sorting locally. Vocab lists are small, and the three sort modes only behave
-   correctly with the full set in hand. No infinite scroll.
-2. **No language filter (yet).** Keep `targetLanguageCode` plumbed through as an
-   optional parameter, but pass `nil` for v1. A "current target language"
-   concept may be added later.
-3. **Row layout:** `targetText` primary, `sourceText` secondary, familiarity
-   (0–5) rendered as filled/empty **dots** on the trailing edge. Read-only — no
-   tap action, no detail view.
-4. **Sort modes:** Alphabetical, Date, Familiarity.
+1. **Vocab items are shared app-wide state.** They live in a single
+   `@Shared(.vocabItems)` value that multiple screens read and (later) edit —
+   not local to the Library page.
+2. **Lifecycle-driven loading.** The shared vocab items are:
+   - **loaded / refreshed on sign-in and on the app entering the foreground**, and
+   - **cleared on sign-out**.
+   The Library page does *not* trigger loads on appear; it only displays the
+   shared state (plus a manual retry on error).
+3. **In-memory, not persisted.** The server is the source of truth and the data
+   is refreshed on sign-in/foreground and cleared on sign-out, so the shared
+   value is an in-memory key (like `.activeTab`), not a file-backed offline
+   cache. Upgrading to file storage later is a localized change.
+4. **Load all, sort client-side.** A load pages through the endpoint following
+   `nextCursor` until `null`, holds every item in memory, and sorts locally. No
+   infinite scroll.
+5. **No language filter (yet).** Keep `targetLanguageCode` plumbed as an
+   optional parameter but pass `nil`. A "current target language" may come later.
+6. **Row layout:** `targetText` primary, `sourceText` secondary, familiarity
+   (0–5) as filled/empty **dots** trailing. Read-only — no tap, no detail view.
+7. **Sort modes:** Alphabetical, Date, Familiarity.
 
 ## Server endpoint
 
@@ -32,195 +42,186 @@ familiarity** (0–5). Read-only for v1.
   exact), `limit` (int, default 50, range 1–100, `>100` → 400), `cursor` (opaque
   base64 keyset token — never construct or parse it).
 - **Ordering:** newest first (`createdAt` desc, `id` tiebreak).
-- **200 body:**
-  ```json
-  {
-    "vocabItems": [ { "id": "...", "targetLanguageCode": "es",
-      "sourceText": "dog", "targetText": "perro", "familiarity": 0,
-      "lastSeenAt": null, "timesSeen": 0, "timesCorrect": 0,
-      "timesIncorrect": 0, "lastOutcome": null, "nextDueAt": null,
-      "createdAt": "2026-08-01T10:00:00.000Z",
-      "updatedAt": "2026-08-01T10:00:00.000Z" } ],
-    "pagination": { "limit": 50, "nextCursor": "<opaque>" }
-  }
-  ```
-- `nextCursor` is `null` at end of list. No total count.
+- **200 body:** `{ "vocabItems": [ … ], "pagination": { "limit": 50, "nextCursor": "<opaque>" | null } }`.
+- `nextCursor == null` means end of list. No total count.
 - Timestamps are ISO8601 **with fractional milliseconds** and `Z`
   (`2026-08-01T10:00:00.000Z`).
-- `lastSeenAt`, `nextDueAt`, `lastOutcome` are nullable → optionals.
-- `familiarity`, `timesSeen`, `timesCorrect`, `timesIncorrect` are non-null ints.
-- `lastOutcome` is a free-form nullable `String?` (no fixed enum — do not switch
-  exhaustively).
+- `lastSeenAt`, `nextDueAt`, `lastOutcome` nullable → optionals; `familiarity`,
+  `timesSeen`, `timesCorrect`, `timesIncorrect` non-null ints; `lastOutcome` a
+  free-form nullable `String?`.
 
 ## Components
 
 ### 1. `VocabItem` model — `Lengua/Models/VocabItem.swift`
 
-```swift
-struct VocabItem: Codable, Equatable, Sendable, Identifiable {
-  let id: String
-  let targetLanguageCode: String
-  let sourceText: String
-  let targetText: String
-  let familiarity: Int
-  let lastSeenAt: Date?
-  let timesSeen: Int
-  let timesCorrect: Int
-  let timesIncorrect: Int
-  let lastOutcome: String?
-  let nextDueAt: Date?
-  let createdAt: Date
-  let updatedAt: Date
-}
-```
+`struct VocabItem: Codable, Equatable, Sendable, Identifiable` with every field
+from the contract; nullable fields as optionals; timestamps as `Date`/`Date?`.
+No `CodingKeys` (1:1 camelCase mapping, per repo convention).
 
-No `CodingKeys` (property names map 1:1 to the camelCase JSON, matching repo
-convention).
+### 2. Date decoding — `Lengua/Extensions/JSONDecoder+Lengua.swift`
 
-### 2. Date decoding
-
-Swift's default `.iso8601` strategy does **not** parse the `.000Z` fractional
-seconds. The live client uses a local `JSONDecoder` with a custom
-`dateDecodingStrategy` that tries, in order:
-
-1. `ISO8601DateFormatter` with `[.withInternetDateTime, .withFractionalSeconds]`
-2. `ISO8601DateFormatter` with `[.withInternetDateTime]` (fallback for
-   timestamps without fractional seconds)
-
-and throws `DecodingError.dataCorrupted` if neither matches. This is scoped to
-the vocab-items decode path and does not change the bare `JSONDecoder()` used by
-other endpoints. Optional `Date?` fields decode `null` automatically.
+`JSONDecoder.lenguaISO8601`: a decoder whose `dateDecodingStrategy` tries
+`ISO8601DateFormatter` with `.withFractionalSeconds` first, then plain
+`.withInternetDateTime`, throwing `DecodingError.dataCorrupted` otherwise. Scoped
+to vocab decoding; the bare `JSONDecoder()` elsewhere is untouched.
 
 ### 3. APIClient — thin single-page transport
 
-`APIClient` gains one endpoint. The client returns a single page; the
-"load all pages" loop lives in the model, not the client (correct seam until a
-second caller needs the same behavior).
+`APIClient.getVocabItems: @Sendable (_ targetLanguageCode: String?, _ limit: Int?, _ cursor: String?) async throws -> VocabItemsPage`,
+where `struct VocabItemsPage: Equatable, Sendable { var items: [VocabItem]; var nextCursor: String? }`.
+The client returns one page; the load-all loop lives in `VocabItemsClient`. Live
+impl builds query params via Alamofire `URLEncoding`, attaches
+`Authorization: Bearer` from `@Shared(.auth)`, decodes with `lenguaISO8601`, and
+throws `APIError` on non-2xx / missing token.
+
+### 4. Shared vocab state
+
+`Lengua/State/VocabItems.swift`:
 
 ```swift
-var getVocabItems: @Sendable (
-  _ targetLanguageCode: String?,
-  _ limit: Int?,
-  _ cursor: String?
-) async throws -> VocabItemsPage
-```
-
-```swift
-struct VocabItemsPage: Equatable, Sendable {
-  var items: [VocabItem]
-  var nextCursor: String?
+struct VocabItems: Equatable, Sendable {
+  var items: IdentifiedArrayOf<VocabItem> = []
+  var isLoading = false
+  var loadFailed = false
 }
 ```
 
-A real struct (not a tuple) — tuples are awkward at test call sites.
-
-**Live implementation** (`APIClient+Live.swift`):
-- Build query parameters via Alamofire `URLEncoding` (only non-nil params;
-  default `limit` handled by caller passing an explicit value).
-- Attach `headers: [.authorization(bearerToken: token)]`, reading the token from
-  `@Shared(.auth)` inside the closure (see Auth below).
-- Decode with the custom fractional-ISO8601 `JSONDecoder`.
-- Throw a structured `APIError` on non-2xx responses and on a missing token.
-
-### 4. Auth header
-
-No request attaches a Bearer token today — this establishes the precedent. The
-live client reads `@Shared(.auth)` inside its closure to get `jwtToken`.
-
-Considered but deferred: a dedicated "current access token" `@Dependency`
-(Codex's cleanest option). Reading `@Shared` directly is idiomatic for
-swift-sharing, is trivially refactorable to a token dependency later, and keeps
-v1 scope tight. If the token is `nil`, `getVocabItems` throws rather than making
-an unauthenticated request.
-
-### 5. `LibraryPageModel` (renames `DeckPageModel`)
-
-`@MainActor @Observable final class LibraryPageModel: ViewModel`.
-
-- **Dependencies:** `@ObservationIgnored @Dependency(\.api) var api`
-- **State:** `items: IdentifiedArrayOf<VocabItem>`, `isLoading`, `sortMode`,
-  `presentedAlert: LenguaAlert?`, `hasLoaded`
-- **`viewAppeared() async`:** guarded by `hasLoaded` — set `hasLoaded`/
-  `isLoading` **before the first `await`** so a tab switch or view recreation
-  can't launch a duplicate full-library load. Runs the page loop:
-  - request `limit: 100` (minimize round-trips)
-  - append each page's items into a local array
-  - stop only when `nextCursor == nil`
-  - never parse the cursor
-  - assign `items = IdentifiedArray(uniqueElements: loaded)` **once** at the end
-  - swallow `CancellationError` (do not alert); real errors → `LenguaAlert` with
-    a retry action
-- **`sortedItems: [VocabItem]`** computed — applies `sortMode`.
-- **Display strings** all live on the model: `navigationTitle` = "Library",
-  empty-state text, error messages, sort-mode labels, and the familiarity dot
-  count per row.
-
-### 6. Sort modes
+`Lengua/State/SharedUserDefaults.swift` gains an **in-memory** key:
 
 ```swift
-enum SortMode: String, CaseIterable, Sendable {
-  case date          // default
-  case alphabetical
-  case familiarity
+extension SharedKey where Self == InMemoryKey<VocabItems>.Default {
+  static var vocabItems: Self {
+    Self[.inMemory("vocabItems"), default: VocabItems()]
+  }
 }
 ```
 
-- **Date** — `createdAt` descending (default on open; matches server order and
-  user expectation for a library). Tie-break `id`.
-- **Alphabetical** — `targetText` via `localizedCaseInsensitiveCompare`,
-  tie-break `sourceText`, then `id`.
-- **Familiarity** — **ascending** (least-known first, most actionable for
-  study), tie-break `createdAt` descending.
+### 5. `VocabItemsClient` dependency — `Lengua/Core/VocabItems/VocabItemsClient.swift`
 
-Each mode exposes a display label from the model.
+The single home for the load-all loop, reused by the app lifecycle and the
+Library retry button.
 
-### 7. `LibraryPage` view
+```swift
+@DependencyClient
+struct VocabItemsClient: Sendable {
+  var refresh: @Sendable () async -> Void
+  var clear: @Sendable () -> Void
+}
+```
 
-- `List` of rows: `targetText` (primary), `sourceText` (secondary), familiarity
-  dots (trailing, `familiarity` filled of 5).
-- Sort control in the toolbar (`Menu`/`Picker`) bound to `model.sortMode`.
-- Loading and empty states, both driven by model strings.
-- Zero logic, zero hardcoded strings.
+Live behavior:
+- **`refresh`** — coalesced via an atomic compare-and-set on `isLoading` inside a
+  single `$vocabItems.withLock` (returns early if a load is already running, so
+  overlapping sign-in + foreground triggers load once). Then pages through
+  `api.getVocabItems(nil, 100, cursor)` until `nextCursor == nil`. Before
+  committing results it re-checks `@Shared(.auth).isLoggedIn`, so a sign-out
+  mid-load cannot repopulate. On success writes `items`, clears `isLoading`. On
+  `CancellationError` clears `isLoading` without setting `loadFailed`. On other
+  errors sets `loadFailed`, clears `isLoading`.
+- **`clear`** — `$vocabItems.withLock { $0 = VocabItems() }`.
 
-### 8. Tab wiring
+Reads `@Dependency(\.api)` and `@Shared(...)` inside the closures (resolved at
+call time, so test overrides apply).
 
-- Rename `MainContainerModel.ActiveTab` case `deck` → `library`.
-- `libraryTabTitle` = "Library"; `libraryTabIconName` = `"books.vertical"`.
-- Update the `MainContainer` `TabView` block (page, `tabItem`, `tag`).
-- `activeTab` is an in-memory `@Shared` key (not persisted), default `.lookUp` —
-  renaming the case has no migration cost.
+### 6. `ContentViewModel` — app lifecycle (in `Lengua/Views/Pages/ContentView.swift`)
+
+`ContentView` is currently model-less; add a model that owns auth gating and the
+vocab lifecycle.
+
+```swift
+@MainActor @Observable final class ContentViewModel: ViewModel {
+  @ObservationIgnored @Dependency(\.vocabItemsClient) var vocabItemsClient
+  @ObservationIgnored @Shared(.auth) var auth
+
+  var isLoggedIn: Bool { auth.isLoggedIn }
+
+  func authStateChanged() async {
+    if auth.isLoggedIn { await vocabItemsClient.refresh() }
+    else { vocabItemsClient.clear() }
+  }
+
+  func appEnteredForeground() async {
+    guard auth.isLoggedIn else { return }
+    await vocabItemsClient.refresh()
+  }
+}
+```
+
+`ContentView` uses `model.isLoggedIn` for the MainContainer/SignInPage gate and
+wires:
+- `.task(id: model.isLoggedIn) { await model.authStateChanged() }` — covers fresh
+  sign-in, cold launch already-signed-in, and sign-out (clear).
+- `.onChange(of: scenePhase)` → `.active` ⇒ `Task { await model.appEnteredForeground() }`.
+
+The coalescing lives in the shared `isLoading` flag, so recreating the model
+(SwiftUI re-init) is harmless.
+
+### 7. `LibraryPageModel` (renames `DeckPageModel`)
+
+`@MainActor @Observable`, reads the shared state — it does **not** own or trigger
+loads.
+
+- `@ObservationIgnored @Dependency(\.vocabItemsClient) var vocabItemsClient`
+- `@ObservationIgnored @Shared(.vocabItems) var vocabItems`
+- `var sortMode: SortMode = .date`
+- Derived: `sortedItems` (sorts `vocabItems.items`), `isLoading`
+  (`vocabItems.isLoading`), `isEmptyStateVisible`
+  (`!isLoading && !loadFailed && items.isEmpty`), `showsRetry`
+  (`loadFailed && items.isEmpty`).
+- `func retryButtonTapped() async { await vocabItemsClient.refresh() }`
+- All display strings + familiarity dot helpers live here (title "Library", empty
+  state, sort labels, `familiarityLevel(for:)`, `familiarityMaxLevel = 5`).
+
+### 8. Sort modes (`sortedItems`)
+
+- **Date** — `createdAt` desc (default on open). Tie-break `id`.
+- **Alphabetical** — `targetText` via `localizedCaseInsensitiveCompare`, tie-break
+  `sourceText`, then `id`.
+- **Familiarity** — ascending (least-known first), tie-break `createdAt` desc.
+
+### 9. `LibraryPage` view
+
+`List` of rows (target primary / source secondary / familiarity dots trailing),
+sort control (`Menu`/`Picker`) in the toolbar bound to `model.sortMode`, and
+loading / empty / retry overlays driven by the model. Reflects shared-state
+changes automatically via `@Shared` observation. No load-on-appear. Zero logic,
+zero hardcoded strings.
+
+### 10. Tab wiring — `Lengua/Views/Pages/MainContainer.swift`
+
+Rename `ActiveTab` case `deck` → `library`; `libraryTabTitle` = "Library";
+`libraryTabIconName` = `"books.vertical"`; update the `TabView` block. `activeTab`
+is in-memory, default `.lookUp` — no migration cost.
 
 ## Error handling
 
-- Missing token → `getVocabItems` throws; model shows a `LenguaAlert`.
-- Network / decode / non-2xx → `LenguaAlert` with a retry action that re-runs the
-  load.
-- `CancellationError` → swallowed silently.
+- Missing token → `getVocabItems` throws; surfaces as `loadFailed`.
+- Network / decode / non-2xx → `loadFailed`; Library shows a retry affordance that
+  calls `vocabItemsClient.refresh()`.
+- `CancellationError` → swallowed (no `loadFailed`).
+- Sign-out during a load → results discarded (auth re-check before commit).
 
 ## Testing
 
-All tests use **swift-testing** (`@Suite` structs, `@MainActor`,
-`expectNoDifference`/`expectDifference`), per repo mandate. The existing XCTest
-`DeckPageModelTests` is converted to swift-testing as `LibraryPageModelTests`.
+All tests use **swift-testing** (`@Suite`/`@Test`, `@MainActor`,
+`expectNoDifference`/`expectDifference`). Suites touching `@Shared` in-memory
+state are `.serialized`. The existing XCTest `DeckPageModelTests` and
+`MainContainerModelTests` are converted to swift-testing.
 
-- **VocabItem decoding:** fractional-seconds timestamp, non-fractional fallback,
-  `null` optional dates, full-payload round trip.
-- **Load all pages:** multi-page walk assembles the full set and stops at
-  `nextCursor == nil`.
-- **Empty list:** no items → empty state, no error.
-- **API error:** load failure sets `presentedAlert`; retry re-runs the load.
-- **Duplicate-appearance guard:** calling `viewAppeared()` twice loads once.
-- **Cancellation:** a cancelled load does not set an alert.
-- **Sorts:** each of the three modes orders a fixed fixture as expected,
-  including tie-breaks.
-- **Auth-missing:** no token → error path, no unauthenticated request.
-- **MainContainer:** `ActiveTab.allCases` contains `.library`; tab title/icon
-  strings correct.
+- **VocabItem decoding:** fractional / non-fractional / null / unparseable dates.
+- **API:** injected-dependency override; envelope decode.
+- **VocabItemsClient:** loads all pages into shared state; error → `loadFailed`;
+  `CancellationError` → no `loadFailed`; coalescing (concurrent refresh loads
+  once); `clear` resets; sign-out mid-load discards results.
+- **ContentViewModel:** logged-in `authStateChanged` refreshes, logged-out clears;
+  `appEnteredForeground` refreshes only when logged in.
+- **LibraryPageModel:** three sorts (read shared), derived `isLoading` / empty /
+  retry, `retryButtonTapped` calls `refresh`, title.
+- **MainContainer:** `ActiveTab.allCases` contains `.library`; title/icon strings.
 
 ## Out of scope (v1)
 
 - Language filter / current-language concept.
-- Row tap / detail view.
-- Search.
-- Server-side sorting or infinite scroll.
-- Editing, deleting, or creating vocab items.
+- Editing vocab items from the Library (shared state supports it; no UI yet).
+- Row tap / detail view, search, server-side sorting, infinite scroll.
+- File-backed / offline persistence of the shared state.
