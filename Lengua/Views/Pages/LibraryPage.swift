@@ -84,39 +84,94 @@ final class LibraryPageModel: ViewModel {
 struct LibraryPage: View {
   @State var model: LibraryPageModel
 
+  // Palette shared with the Look Up (Translate) page.
+  private let pageBlue = Color(red: 0.24, green: 0.29, blue: 0.85)
+  private let deepBlue = Color(red: 0.15, green: 0.20, blue: 0.55)
+  private let cardColor = Color(red: 0.98, green: 0.98, blue: 0.96)
+
   var body: some View {
-    List {
-      ForEach(model.sortedItems) { item in
-        LibraryRow(
-          targetText: item.targetText,
-          sourceText: item.sourceText,
-          filledDots: model.familiarityLevel(for: item),
-          totalDots: model.familiarityMaxLevel)
+    ZStack {
+      pageBlue.ignoresSafeArea()
+
+      VStack(spacing: 16) {
+        header
+        content
       }
+      .padding(.horizontal, 16)
+      .padding(.top, 8)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
-    .overlay {
-      if model.isLoading {
-        ProgressView()
-      } else if model.showsRetry {
-        RetryState(message: model.emptyStateText, buttonTitle: model.retryButtonTitle) {
-          await model.retryButtonTapped()
-        }
-      } else if model.isEmptyStateVisible {
-        ContentUnavailableView(model.emptyStateText, systemImage: "books.vertical")
-      }
-    }
-    .navigationTitle(model.navigationTitle)
-    .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
-        Menu(model.sortMenuTitle) {
-          Picker(model.sortMenuTitle, selection: $model.sortMode) {
-            ForEach(model.sortModes, id: \.self) { mode in
-              Text(model.sortModeLabel(mode)).tag(mode)
-            }
+  }
+
+  private var header: some View {
+    HStack(alignment: .firstTextBaseline) {
+      Text(model.navigationTitle)
+        .font(.largeTitle).fontWeight(.bold)
+        .foregroundStyle(.white)
+      Spacer()
+      Menu {
+        Picker(model.sortMenuTitle, selection: $model.sortMode) {
+          ForEach(model.sortModes, id: \.self) { mode in
+            Text(model.sortModeLabel(mode)).tag(mode)
           }
         }
+      } label: {
+        Label(model.sortMenuTitle, systemImage: "arrow.up.arrow.down")
+          .font(.subheadline).fontWeight(.semibold)
+          .foregroundStyle(.white)
       }
     }
+  }
+
+  @ViewBuilder private var content: some View {
+    if model.isLoading {
+      Spacer()
+      ProgressView().tint(.white)
+      Spacer()
+    } else if model.showsRetry {
+      centeredMessage(model.emptyStateText) {
+        Button(model.retryButtonTitle) { Task { await model.retryButtonTapped() } }
+          .font(.headline)
+          .buttonStyle(.borderedProminent)
+          .tint(.white)
+          .foregroundStyle(deepBlue)
+      }
+    } else if model.isEmptyStateVisible {
+      centeredMessage(model.emptyStateText) { EmptyView() }
+    } else {
+      ScrollView {
+        LazyVStack(spacing: 10) {
+          ForEach(model.sortedItems) { item in
+            LibraryRow(
+              targetText: item.targetText,
+              sourceText: item.sourceText,
+              filledDots: model.familiarityLevel(for: item),
+              totalDots: model.familiarityMaxLevel,
+              deepBlue: deepBlue,
+              cardColor: cardColor)
+          }
+        }
+        .padding(.bottom, 16)
+      }
+    }
+  }
+
+  private func centeredMessage<Action: View>(
+    _ text: String, @ViewBuilder action: () -> Action
+  ) -> some View {
+    VStack(spacing: 16) {
+      Spacer()
+      Image(systemName: "books.vertical")
+        .font(.system(size: 44))
+        .foregroundStyle(.white.opacity(0.7))
+      Text(text)
+        .font(.body)
+        .foregroundStyle(.white.opacity(0.85))
+        .multilineTextAlignment(.center)
+      action()
+      Spacer()
+    }
+    .frame(maxWidth: .infinity)
   }
 }
 
@@ -125,35 +180,31 @@ private struct LibraryRow: View {
   let sourceText: String
   let filledDots: Int
   let totalDots: Int
+  let deepBlue: Color
+  let cardColor: Color
 
   var body: some View {
-    HStack {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(targetText).font(.headline)
-        Text(sourceText).font(.subheadline).foregroundStyle(.secondary)
-      }
-      Spacer()
+    HStack(spacing: 12) {
+      Text(targetText)
+        .font(.headline)
+        .foregroundStyle(deepBlue)
+        .lineLimit(1)
+      Text(sourceText)
+        .font(.subheadline)
+        .foregroundStyle(deepBlue.opacity(0.55))
+        .lineLimit(1)
+      Spacer(minLength: 8)
       HStack(spacing: 3) {
         ForEach(0..<totalDots, id: \.self) { index in
           Circle()
-            .fill(index < filledDots ? Color.accentColor : Color.secondary.opacity(0.25))
+            .fill(index < filledDots ? deepBlue : deepBlue.opacity(0.18))
             .frame(width: 7, height: 7)
         }
       }
     }
-  }
-}
-
-private struct RetryState: View {
-  let message: String
-  let buttonTitle: String
-  let retry: () async -> Void
-
-  var body: some View {
-    ContentUnavailableView {
-      Label(message, systemImage: "exclamationmark.triangle")
-    } actions: {
-      Button(buttonTitle) { Task { await retry() } }
-    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 14)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(RoundedRectangle(cornerRadius: 16).fill(cardColor))
   }
 }
