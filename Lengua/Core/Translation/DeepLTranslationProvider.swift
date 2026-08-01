@@ -22,4 +22,10 @@ struct DeepLTranslationProvider: TranslationProvider {
   ) async -> TranslatorAvailability {
     .unknown
   }
+
+  func prepareTranslation(
+    from source: Locale.Language, to target: Locale.Language
+  ) async throws {
+    throw TranslatorError.notImplemented
+  }
 }

@@ -17,6 +17,11 @@ extension TranslatorClient: DependencyKey {
         let provider = TranslationProviderSelector.provider(
           for: TranslationProviderSelector.current)
         return await provider.availability(from: direction.source, to: direction.target)
+      },
+      prepareTranslation: { direction in
+        let provider = TranslationProviderSelector.provider(
+          for: TranslationProviderSelector.current)
+        try await provider.prepareTranslation(from: direction.source, to: direction.target)
       }
     )
   }
