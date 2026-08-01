@@ -23,12 +23,10 @@ final class SignInPageModel: ViewModel {
   // MARK: - Properties
   var presentedAlert: LenguaAlert?
   var isSigningIn = false
-  let isAppleSignInEnabled = false
 
   var titleText: String { "Lengua" }
   var subtitleText: String { "Look it up. Keep it. Say it back." }
   var googleSignInButtonTitle: String { "Sign in with Google" }
-  var appleSignInButtonTitle: String { "Sign in with Apple" }
 
   @ObservationIgnored
   var keyWindowProvider: @MainActor () -> UIViewController? = {
@@ -77,9 +75,6 @@ final class SignInPageModel: ViewModel {
       }
     }
   }
-
-  // Apple sign-in is intentionally disabled for now (button rendered, no-op).
-  func appleSignInButtonTapped() {}
 
   func signInWithAppleButtonTapped(request: ASAuthorizationAppleIDRequest) {
     request.requestedScopes = [.email, .fullName]
@@ -241,15 +236,16 @@ struct SignInPage: View {
           .disabled(model.isSigningIn)
           .opacity(model.isSigningIn ? 0.5 : 1)
 
-          WhiteSignInButton(
-            iconImageName: nil,
-            systemIcon: "apple.logo",
-            title: model.appleSignInButtonTitle
-          ) {
-            model.appleSignInButtonTapped()
+          SignInWithAppleButton(.signIn) { request in
+            model.signInWithAppleButtonTapped(request: request)
+          } onCompletion: { result in
+            Task { await model.signInWithAppleCompleted(result: result) }
           }
-          .disabled(!model.isAppleSignInEnabled)
-          .opacity(model.isAppleSignInEnabled ? 1 : 0.5)
+          .signInWithAppleButtonStyle(.white)
+          .frame(height: 56)
+          .clipShape(RoundedRectangle(cornerRadius: 12))
+          .disabled(model.isSigningIn)
+          .opacity(model.isSigningIn ? 0.5 : 1)
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 24)

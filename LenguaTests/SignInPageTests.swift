@@ -18,8 +18,6 @@ struct SignInPageTests {
     expectNoDifference(model.titleText, "Lengua")
     expectNoDifference(model.subtitleText, "Look it up. Keep it. Say it back.")
     expectNoDifference(model.googleSignInButtonTitle, "Sign in with Google")
-    expectNoDifference(model.appleSignInButtonTitle, "Sign in with Apple")
-    #expect(!model.isAppleSignInEnabled)
   }
 
   @Test func signInWithGoogleTracksSignInStartedEvent() async {
