@@ -112,6 +112,38 @@ struct VocabItemsClientTests {
     }
   }
 
+  @Test func concurrentRefreshesCoalesceToOneLoad() async {
+    let callCount = LockIsolated(0)
+    let started = AsyncStream.makeStream(of: Void.self)
+    let release = AsyncStream.makeStream(of: Void.self)
+
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in
+        callCount.withValue { $0 += 1 }
+        started.continuation.yield()  // signal this load has begun
+        var iterator = release.stream.makeAsyncIterator()
+        _ = await iterator.next()  // suspend until released, so both refreshes overlap
+        return VocabItemsPage(items: [self.item(id: "1")], nextCursor: nil)
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      async let first: Void = client.refresh()  // starts a load, then suspends on `release`
+      var startedIterator = started.stream.makeAsyncIterator()
+      _ = await startedIterator.next()  // wait until the first load is genuinely in flight
+
+      await client.refresh()  // second call: isLoading already true -> coalesced no-op
+      expectNoDifference(callCount.value, 1)
+
+      release.continuation.yield()  // let the first load finish
+      await first
+      expectNoDifference(vocabItems.items.map(\.id), ["1"])
+    }
+  }
+
   @Test func clearResetsSharedState() {
     withDependencies {
       $0.vocabItemsClient = .liveValue
