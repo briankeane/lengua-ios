@@ -56,6 +56,49 @@ extension APIClient: DependencyKey {
 
         return decoded.result
       },
+      signInViaApple: { identityToken, email, authorizationCode, firstName, lastName in
+        let path = "v1/auth/apple"
+        let url = baseUrl.appendingPathComponent(path)
+        var parameters: [String: Any] = [
+          "identityToken": identityToken,
+          "authorizationCode": authorizationCode,
+          "firstName": firstName,
+        ]
+        if let email { parameters["email"] = email }
+        if let lastName { parameters["lastName"] = lastName }
+
+        let response = await session.request(
+          url,
+          method: .post,
+          parameters: parameters,
+          encoding: JSONEncoding.default
+        ).serializingData().response
+
+        guard let httpResponse = response.response else {
+          throw SignInAPIError(
+            authMethod: .apple, endpointPath: "/\(path)", statusCode: nil,
+            responseBody: nil, underlyingError: response.error ?? APIError.dataNotValid)
+        }
+
+        let body = response.data.flatMap { String(data: $0, encoding: .utf8) }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+          throw SignInAPIError(
+            authMethod: .apple, endpointPath: "/\(path)",
+            statusCode: httpResponse.statusCode, responseBody: body,
+            underlyingError: response.error ?? APIError.dataNotValid)
+        }
+
+        guard let data = response.data,
+          let decoded = try? JSONDecoder().decode(AppleSignInResponse.self, from: data)
+        else {
+          throw SignInAPIError(
+            authMethod: .apple, endpointPath: "/\(path)",
+            statusCode: httpResponse.statusCode, responseBody: body,
+            underlyingError: APIError.dataNotValid)
+        }
+
+        return decoded.result
+      },
       saveVocabItem: { request in
         @Shared(.auth) var auth
         guard let token = auth.jwtToken, !token.isEmpty else {

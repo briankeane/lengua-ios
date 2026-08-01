@@ -15,6 +15,15 @@ struct APIClient: Sendable {
   /// Exchanges a Google ID token for a Lengua session (JWT + user).
   var signInViaGoogle: @Sendable (_ idToken: String) async throws -> GoogleSignInResult
 
+  /// Exchanges an Apple identity token + auth code for a Lengua session (JWT + user).
+  /// Apple returns name/email only on the first authorization; the client forwards
+  /// whatever it receives. `email` and `lastName` are omitted from the body when nil.
+  var signInViaApple:
+    @Sendable (
+      _ identityToken: String, _ email: String?, _ authorizationCode: String,
+      _ firstName: String, _ lastName: String?
+    ) async throws -> AppleSignInResult
+
   /// Saves a translated word/phrase for the signed-in user (auth required).
   /// The server treats 201 (newly saved) and 200 (already saved) identically,
   /// so both resolve to the returned item without error.
@@ -41,6 +50,33 @@ struct GoogleSignInResponse: Decodable {
 
   var result: GoogleSignInResult {
     GoogleSignInResult(
+      user: User(
+        id: user.id, email: user.email, firstName: user.firstName,
+        lastName: user.lastName, profileImageUrl: user.profileImageUrl),
+      token: token)
+  }
+}
+
+struct AppleSignInResult: Equatable, Sendable {
+  let user: User
+  let token: String
+}
+
+/// Decodes the `POST /v1/auth/apple` response `{ user, token }`.
+/// Extra server fields (`displayName`, `role`) are intentionally ignored.
+struct AppleSignInResponse: Decodable {
+  struct APIUser: Decodable {
+    let id: String
+    let email: String
+    let firstName: String?
+    let lastName: String?
+    let profileImageUrl: String?
+  }
+  let user: APIUser
+  let token: String
+
+  var result: AppleSignInResult {
+    AppleSignInResult(
       user: User(
         id: user.id, email: user.email, firstName: user.firstName,
         lastName: user.lastName, profileImageUrl: user.profileImageUrl),
