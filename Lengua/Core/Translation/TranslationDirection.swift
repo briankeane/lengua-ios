@@ -24,6 +24,14 @@ enum TranslationDirection: String, Sendable, Equatable, CaseIterable, Codable {
     }
   }
 
+  /// ISO 639-1 code for the target language, for API payloads (e.g. `"es"`).
+  var targetLanguageCode: String {
+    switch self {
+    case .englishToSpanish: "es"
+    case .spanishToEnglish: "en"
+    }
+  }
+
   /// Label for the input card (the source language).
   var inputLabel: String {
     switch self {
