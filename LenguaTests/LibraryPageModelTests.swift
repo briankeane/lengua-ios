@@ -16,10 +16,8 @@ struct LibraryPageModelTests {
   ) -> VocabItem {
     VocabItem(
       id: id, targetLanguageCode: "es", sourceText: source, targetText: target,
-      familiarity: familiarity, lastSeenAt: nil, timesSeen: 0, timesCorrect: 0,
-      timesIncorrect: 0, lastOutcome: nil, nextDueAt: nil,
-      createdAt: Date(timeIntervalSince1970: created),
-      updatedAt: Date(timeIntervalSince1970: created))
+      receptiveFamiliarity: familiarity,
+      createdAt: Date(timeIntervalSince1970: created))
   }
 
   @Test func navigationTitleIsLibrary() {
