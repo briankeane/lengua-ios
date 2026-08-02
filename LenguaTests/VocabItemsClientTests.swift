@@ -199,4 +199,86 @@ struct VocabItemsClientTests {
       expectNoDifference(vocabItems, VocabItems())
     }
   }
+
+  @Test func deleteRemovesItemFromSharedStateOnSuccess() async throws {
+    try await withDependencies {
+      $0.api.deleteVocabItem = { _ in }  // 204 success
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems(
+        items: [item(id: "1"), item(id: "2")])
+      @Dependency(\.vocabItemsClient) var client
+
+      try await client.delete("1")
+
+      expectNoDifference(vocabItems.items.map(\.id), ["2"])
+    }
+  }
+
+  @Test func deleteTreats404AsSuccess() async throws {
+    // The live APIClient maps 404 to a normal return, so from the client's
+    // perspective a 404 is indistinguishable from a 204: the item is removed.
+    try await withDependencies {
+      $0.api.deleteVocabItem = { _ in }  // stands in for 204 or 404
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems(items: [item(id: "gone")])
+      @Dependency(\.vocabItemsClient) var client
+
+      try await client.delete("gone")
+
+      expectNoDifference(vocabItems.items.isEmpty, true)
+    }
+  }
+
+  @Test func deleteThrowsAndKeepsItemOnFailure() async {
+    await withDependencies {
+      $0.api.deleteVocabItem = { _ in throw APIError.dataNotValid }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems(items: [item(id: "1")])
+      @Dependency(\.vocabItemsClient) var client
+
+      await #expect(throws: APIError.self) { try await client.delete("1") }
+
+      expectNoDifference(vocabItems.items.map(\.id), ["1"])
+    }
+  }
+
+  @Test func deleteIsNoOpWhenItemAlreadyAbsent() async throws {
+    try await withDependencies {
+      $0.api.deleteVocabItem = { _ in }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems(items: [item(id: "keep")])
+      @Dependency(\.vocabItemsClient) var client
+
+      try await client.delete("not-there")  // must not trap
+
+      expectNoDifference(vocabItems.items.map(\.id), ["keep"])
+    }
+  }
+
+  @Test func deleteDiscardsRemovalIfAccountChangedMidDelete() async throws {
+    try await withDependencies {
+      $0.api.deleteVocabItem = { _ in
+        @Shared(.auth) var auth
+        $auth.withLock { $0 = Auth(jwtToken: "userB") }  // account switches mid-delete
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "userA")
+      @Shared(.vocabItems) var vocabItems = VocabItems(items: [item(id: "1")])
+      @Dependency(\.vocabItemsClient) var client
+
+      try await client.delete("1")
+
+      // userA's delete must not mutate userB's shared library.
+      expectNoDifference(vocabItems.items.map(\.id), ["1"])
+    }
+  }
 }
