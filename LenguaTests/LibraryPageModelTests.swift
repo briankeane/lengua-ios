@@ -93,4 +93,71 @@ struct LibraryPageModelTests {
     expectNoDifference(model.sortedItems.map(\.id), ["new", "learning", "known"])
   }
 
+  @Test func deleteButtonTappedRemovesItem() async {
+    let deleted = LockIsolated<[String]>([])
+    let model = withDependencies {
+      $0.vocabItemsClient.delete = { id in
+        deleted.withValue { $0.append(id) }
+        @Shared(.vocabItems) var vocabItems
+        $vocabItems.withLock { _ = $0.items.remove(id: id) }
+      }
+    } operation: {
+      @Shared(.vocabItems) var vocabItems = VocabItems(
+        items: [item(id: "1"), item(id: "2")])
+      return LibraryPageModel()
+    }
+
+    await model.deleteButtonTapped(item(id: "1"))
+
+    expectNoDifference(deleted.value, ["1"])
+    expectNoDifference(model.sortedItems.map(\.id), ["2"])
+    expectNoDifference(model.presentedAlert, nil)
+  }
+
+  @Test func deleteFailureShowsAlertAndKeepsItem() async {
+    let model = withDependencies {
+      $0.vocabItemsClient.delete = { _ in throw APIError.dataNotValid }
+    } operation: {
+      @Shared(.vocabItems) var vocabItems = VocabItems(items: [item(id: "1")])
+      return LibraryPageModel()
+    }
+
+    await model.deleteButtonTapped(item(id: "1"))
+
+    expectNoDifference(model.presentedAlert, .deleteFailed)
+    expectNoDifference(model.sortedItems.map(\.id), ["1"])
+    expectNoDifference(model.isDeleting("1"), false)
+  }
+
+  @Test func deleteButtonTappedIsGuardedAgainstDuplicateTaps() async {
+    let callCount = LockIsolated(0)
+    let started = AsyncStream.makeStream(of: Void.self)
+    let release = AsyncStream.makeStream(of: Void.self)
+    let model = withDependencies {
+      $0.vocabItemsClient.delete = { _ in
+        callCount.withValue { $0 += 1 }
+        started.continuation.yield()  // signal the first delete is genuinely in flight
+        var iterator = release.stream.makeAsyncIterator()
+        _ = await iterator.next()  // hold the first delete in flight
+      }
+    } operation: {
+      @Shared(.vocabItems) var vocabItems = VocabItems(items: [item(id: "1")])
+      return LibraryPageModel()
+    }
+
+    async let first: Void = model.deleteButtonTapped(item(id: "1"))
+    // Wait until the first delete has actually begun (id inserted, closure entered)
+    // rather than racing on Task.yield() timing.
+    var startedIterator = started.stream.makeAsyncIterator()
+    _ = await startedIterator.next()
+    expectNoDifference(model.isDeleting("1"), true)
+
+    await model.deleteButtonTapped(item(id: "1"))  // second tap: guarded no-op
+    expectNoDifference(callCount.value, 1)
+
+    release.continuation.yield()
+    await first
+    expectNoDifference(model.isDeleting("1"), false)
+  }
+
 }

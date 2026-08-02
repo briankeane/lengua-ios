@@ -17,6 +17,8 @@ final class LibraryPageModel: ViewModel {
 
   // MARK: - Properties
   var sortMode: SortMode = .date
+  var presentedAlert: LenguaAlert?
+  var deletingItemIds: Set<VocabItem.ID> = []
 
   enum SortMode: String, CaseIterable, Sendable {
     case date
@@ -29,11 +31,25 @@ final class LibraryPageModel: ViewModel {
     await vocabItemsClient.refresh()
   }
 
+  func deleteButtonTapped(_ item: VocabItem) async {
+    guard !deletingItemIds.contains(item.id) else { return }
+    deletingItemIds.insert(item.id)
+    defer { deletingItemIds.remove(item.id) }
+    do {
+      try await vocabItemsClient.delete(item.id)
+    } catch {
+      presentedAlert = .deleteFailed
+    }
+  }
+
   // MARK: - View Helpers
   var navigationTitle: String { "Library" }
   var emptyStateText: String { "You haven't saved any vocab items yet." }
   var retryButtonTitle: String { "Try Again" }
   var sortMenuTitle: String { "Sort" }
+  var deleteButtonTitle: String { "Delete" }
+
+  func isDeleting(_ id: VocabItem.ID) -> Bool { deletingItemIds.contains(id) }
 
   var sortModes: [SortMode] { SortMode.allCases }
 
