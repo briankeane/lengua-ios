@@ -111,6 +111,7 @@ struct LibraryPage: View {
       .padding(.top, 8)
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
+    .lenguaAlert($model.presentedAlert)
   }
 
   private var header: some View {
@@ -149,18 +150,38 @@ struct LibraryPage: View {
     } else if model.isEmptyStateVisible {
       centeredMessage(model.emptyStateText) { EmptyView() }
     } else {
-      ScrollView {
-        LazyVStack(spacing: 10) {
-          ForEach(model.sortedItems) { item in
-            LibraryRow(
-              targetText: item.targetText,
-              sourceText: item.sourceText,
-              deepBlue: deepBlue,
-              cardColor: cardColor)
+      List {
+        ForEach(model.sortedItems) { item in
+          LibraryRow(
+            targetText: item.targetText,
+            sourceText: item.sourceText,
+            deepBlue: deepBlue,
+            cardColor: cardColor
+          )
+          .overlay {
+            if model.isDeleting(item.id) {
+              ProgressView()
+                .tint(deepBlue)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(cardColor.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
+                .allowsHitTesting(false)
+            }
+          }
+          .listRowInsets(EdgeInsets(top: 5, leading: 0, bottom: 5, trailing: 0))
+          .listRowSeparator(.hidden)
+          .listRowBackground(Color.clear)
+          .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+              Task { await model.deleteButtonTapped(item) }
+            } label: {
+              Label(model.deleteButtonTitle, systemImage: "trash")
+            }
           }
         }
-        .padding(.bottom, 16)
       }
+      .listStyle(.plain)
+      .scrollContentBackground(.hidden)
+      .environment(\.defaultMinListRowHeight, 0)
     }
   }
 
