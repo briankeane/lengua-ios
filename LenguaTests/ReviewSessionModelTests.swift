@@ -247,6 +247,21 @@ import Testing
     expectNoDifference(model.directionEyebrow(.productive), "Produce")
   }
 
+  @Test func typedResultBooleansReflectWrongVsRightAnswer() {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    let model = ReviewSessionModel(cards: [card("a", .productive)])
+
+    model.typedAnswer = "nope"
+    model.checkButtonTapped()
+    expectNoDifference(model.typedResultIsError, true)
+    expectNoDifference(model.showsCorrectOverride, true)
+
+    model.typedAnswer = "t-a"
+    model.checkButtonTapped()
+    expectNoDifference(model.typedResultIsError, false)
+    expectNoDifference(model.showsCorrectOverride, false)
+  }
+
   @Test func resultTitleAndAccentNoteDistinguishCorrectFromAccentedCorrect() {
     @Shared(.vocabItems) var vocabItems = VocabItems()
     let model = ReviewSessionModel(cards: [card("a", .productive)])

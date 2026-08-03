@@ -98,6 +98,9 @@ final class ReviewSessionModel: ViewModel {
   var retryButtonTitle: String { "Try Again" }
   var submitFailedText: String { "Couldn't save that." }
 
+  var typedResultIsError: Bool { typedGrade == .incorrect }
+  var showsCorrectOverride: Bool { typedGrade == .incorrect }
+
   var doneTitle: String { "Done" }
   var finishedText: String {
     "Session complete! You cleared \(clearedCount) of \(batchCount) cards."
@@ -265,8 +268,8 @@ struct ReviewSessionView: View {
       .frame(maxWidth: .infinity)
       .background(RoundedRectangle(cornerRadius: 20).fill(cardColor))
 
-      if let typedGrade = model.typedGrade {
-        if typedGrade == .incorrect {
+      if model.typedGrade != nil {
+        if model.showsCorrectOverride {
           HStack(spacing: 16) {
             secondaryButton(model.overrideTitle) { model.markCorrectOverrideButtonTapped() }
             primaryButton(model.continueTitle) { Task { await model.continueButtonTapped() } }
@@ -286,7 +289,7 @@ struct ReviewSessionView: View {
     VStack(spacing: 8) {
       Text(model.resultTitle(for: grade))
         .font(.title3).fontWeight(.bold)
-        .foregroundStyle(grade == .incorrect ? .red : deepBlue)
+        .foregroundStyle(model.typedResultIsError ? .red : deepBlue)
       Text(current.targetText)
         .font(.title2).fontWeight(.semibold)
         .foregroundStyle(deepBlue)

@@ -32,6 +32,7 @@ import Testing
       $0.api.getReviewQueue = { _, _, _ in
         ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 1, productive: 3, total: 4))
       }
+      $0.vocabItemsClient.refresh = {}
     } operation: {
       ReviewPageModel()
     }
@@ -42,6 +43,7 @@ import Testing
       $0.api.getReviewQueue = { _, _, _ in
         ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 0, productive: 0, total: 0))
       }
+      $0.vocabItemsClient.refresh = {}
     } operation: {
       ReviewPageModel()
     }
@@ -56,6 +58,7 @@ import Testing
       $0.api.getReviewQueue = { _, _, _ in
         ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 0, productive: 0, total: 0))
       }
+      $0.vocabItemsClient.refresh = {}
     } operation: {
       ReviewPageModel()
     }
@@ -72,6 +75,7 @@ import Testing
       $0.api.getReviewQueue = { _, _, _ in
         ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 0, productive: 0, total: 0))
       }
+      $0.vocabItemsClient.refresh = {}
     } operation: {
       ReviewPageModel()
     }
@@ -87,6 +91,7 @@ import Testing
       $0.api.getReviewQueue = { _, _, _ in
         ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 0, productive: 0, total: 0))
       }
+      $0.vocabItemsClient.refresh = {}
     } operation: {
       ReviewPageModel()
     }
@@ -107,6 +112,7 @@ import Testing
         return ReviewQueue(
           cards: [], dueCounts: DueCounts(receptive: 1, productive: 0, total: 1))
       }
+      $0.vocabItemsClient.refresh = {}
     } operation: {
       ReviewPageModel()
     }
@@ -145,6 +151,24 @@ import Testing
     }
     await emptyModel.startReviewingButtonTapped()
     #expect(emptyModel.session == nil)
+  }
+
+  @Test func viewAppearedRefreshesVocabItemsCache() async {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    let refreshes = LockIsolated(0)
+
+    let model = withDependencies {
+      $0.api.getReviewQueue = { _, _, _ in
+        ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 0, productive: 0, total: 0))
+      }
+      $0.vocabItemsClient.refresh = { refreshes.withValue { $0 += 1 } }
+    } operation: {
+      ReviewPageModel()
+    }
+
+    await model.viewAppeared()
+
+    expectNoDifference(refreshes.value, 1)
   }
 
   @Test func hubStringHelpersAreStable() {

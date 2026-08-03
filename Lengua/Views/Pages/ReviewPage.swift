@@ -8,6 +8,7 @@ final class ReviewPageModel: ViewModel {
 
   // MARK: - Dependencies
   @ObservationIgnored @Dependency(\.api) var api
+  @ObservationIgnored @Dependency(\.vocabItemsClient) var vocabItemsClient
 
   // MARK: - Shared State
   @ObservationIgnored @Shared(.vocabItems) var vocabItems
@@ -33,6 +34,7 @@ final class ReviewPageModel: ViewModel {
 
   // MARK: - User Actions
   func viewAppeared() async {
+    await vocabItemsClient.refresh()
     await refreshDueCounts()
   }
 
