@@ -236,4 +236,26 @@ import Testing
     let model = ReviewSessionModel(cards: [card("a", .receptive), card("a", .productive)])
     expectNoDifference(model.batchCount, 2)
   }
+
+  @Test func stringHelpersProvideExpectedTitles() {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    let model = ReviewSessionModel(cards: [card("a")])
+    expectNoDifference(model.gotItTitle, "Got It")
+    expectNoDifference(model.missedItTitle, "Missed It")
+    expectNoDifference(model.doneTitle, "Done")
+    expectNoDifference(model.directionEyebrow(.receptive), "Recognize")
+    expectNoDifference(model.directionEyebrow(.productive), "Produce")
+  }
+
+  @Test func resultTitleAndAccentNoteDistinguishCorrectFromAccentedCorrect() {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    let model = ReviewSessionModel(cards: [card("a", .productive)])
+    expectNoDifference(model.resultTitle(for: .correct), "Correct!")
+    expectNoDifference(model.resultTitle(for: .correctWithAccentNote), "Correct!")
+    expectNoDifference(model.resultTitle(for: .incorrect), "Not Quite")
+    expectNoDifference(model.accentNote(for: .correct), nil)
+    expectNoDifference(
+      model.accentNote(for: .correctWithAccentNote), "Close — watch the accent marks.")
+    expectNoDifference(model.accentNote(for: .incorrect), nil)
+  }
 }

@@ -146,4 +146,12 @@ import Testing
     await emptyModel.startReviewingButtonTapped()
     #expect(emptyModel.session == nil)
   }
+
+  @Test func hubStringHelpersAreStable() {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    let model = ReviewPageModel()
+    expectNoDifference(model.modePickerLabel, "Review Mode")
+    expectNoDifference(
+      model.loadFailedText, "Something went wrong loading your review queue.")
+  }
 }
