@@ -117,6 +117,34 @@ extension APIClient: DependencyKey {
         else { throw APIError.dataNotValid }
 
         return item
+      },
+      deleteVocabItem: { id in
+        @Shared(.auth) var auth
+        guard let token = auth.jwtToken, !token.isEmpty else {
+          throw APIError.unauthorized
+        }
+
+        let url =
+          baseUrl
+          .appendingPathComponent("v1/vocab-items")
+          .appendingPathComponent(id)
+        let response = await session.request(
+          url,
+          method: .delete,
+          headers: [.authorization(bearerToken: token)]
+        ).serializingData().response
+
+        guard let httpResponse = response.response else {
+          throw response.error ?? APIError.dataNotValid
+        }
+
+        // 204 = deleted, 404 = already gone or not owned. Both are the same end
+        // state for the client, so treat 404 as success (mirrors save's 200/201).
+        if httpResponse.statusCode == 204 || httpResponse.statusCode == 404 {
+          return
+        }
+        if httpResponse.statusCode == 401 { throw APIError.unauthorized }
+        throw APIError.dataNotValid
       }
     )
   }()

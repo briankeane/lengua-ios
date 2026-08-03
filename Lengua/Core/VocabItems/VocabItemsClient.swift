@@ -10,6 +10,11 @@ struct VocabItemsClient: Sendable {
   var refresh: @Sendable () async -> Void
   /// Resets `@Shared(.vocabItems)` to empty (used on sign-out).
   var clear: @Sendable () -> Void
+  /// Deletes one vocab item server-side, then removes it from
+  /// `@Shared(.vocabItems)` on success. Throws on failure without mutating
+  /// shared state. Bound to the current account: a sign-out or account switch
+  /// mid-delete discards the local removal.
+  var delete: @Sendable (_ id: String) async throws -> Void
 }
 
 extension VocabItemsClient: DependencyKey {
@@ -59,6 +64,23 @@ extension VocabItemsClient: DependencyKey {
     clear: {
       @Shared(.vocabItems) var vocabItems
       $vocabItems.withLock { $0 = VocabItems() }
+    },
+    delete: { id in
+      @Shared(.auth) var auth
+      let startingToken = auth.jwtToken  // bind this delete to the current account
+
+      @Dependency(\.api) var api
+      try await api.deleteVocabItem(id)
+
+      @Shared(.vocabItems) var vocabItems
+      $vocabItems.withLock { state in
+        // Only mutate if the same account that started the delete is still
+        // signed in: an account switch mid-delete must not touch the new
+        // account's library.
+        if auth.jwtToken == startingToken {
+          _ = state.items.remove(id: id)
+        }
+      }
     }
   )
 }

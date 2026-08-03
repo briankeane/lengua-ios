@@ -27,6 +27,12 @@ struct APIClient: Sendable {
   /// The server treats 201 (newly saved) and 200 (already saved) identically,
   /// so both resolve to the returned item without error.
   var saveVocabItem: @Sendable (_ request: SaveVocabItemRequest) async throws -> VocabItem
+
+  /// Permanently deletes one of the signed-in user's vocab items (auth required).
+  /// The server returns 204 on delete and 404 when the item is already gone or
+  /// owned by someone else; both mean "no longer exists", so both resolve without
+  /// error.
+  var deleteVocabItem: @Sendable (_ id: String) async throws -> Void
 }
 
 struct GoogleSignInResult: Equatable, Sendable {
