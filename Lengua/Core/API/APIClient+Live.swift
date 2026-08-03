@@ -74,9 +74,9 @@ extension APIClient: DependencyKey {
           headers: [.authorization(bearerToken: token)]
         ).serializingData().response
 
-        guard let httpResponse = response.response,
-          (200..<300).contains(httpResponse.statusCode),
-          let data = response.data
+        guard let httpResponse = response.response else { throw APIError.dataNotValid }
+        if httpResponse.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(httpResponse.statusCode), let data = response.data
         else { throw APIError.dataNotValid }
 
         guard
