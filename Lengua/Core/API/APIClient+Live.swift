@@ -160,11 +160,11 @@ extension APIClient: DependencyKey {
           headers: [.authorization(bearerToken: token)]
         ).serializingData().response
 
-        guard let http = response.response, let data = response.data else {
+        guard let httpResponse = response.response else { throw APIError.dataNotValid }
+        if httpResponse.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(httpResponse.statusCode), let data = response.data else {
           throw APIError.dataNotValid
         }
-        if http.statusCode == 401 { throw APIError.unauthorized }
-        guard (200..<300).contains(http.statusCode) else { throw APIError.dataNotValid }
         guard
           let decoded = try? JSONDecoder.lenguaISO8601.decode(ReviewQueueResponse.self, from: data)
         else { throw APIError.dataNotValid }
@@ -182,11 +182,13 @@ extension APIClient: DependencyKey {
           headers: [.authorization(bearerToken: token)]
         ).serializingData().response
 
-        guard let http = response.response else { throw response.error ?? APIError.dataNotValid }
-        if http.statusCode == 401 { throw APIError.unauthorized }
-        guard (200..<300).contains(http.statusCode), let data = response.data else {
+        guard let httpResponse = response.response else {
+          throw response.error ?? APIError.dataNotValid
+        }
+        if httpResponse.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(httpResponse.statusCode), let data = response.data else {
           let body = response.data.flatMap { String(data: $0, encoding: .utf8) }
-          throw APIError.validationError(body ?? "Review failed (\(http.statusCode))")
+          throw APIError.validationError(body ?? "Review failed (\(httpResponse.statusCode))")
         }
         guard let item = try? JSONDecoder.lenguaISO8601.decode(VocabItem.self, from: data)
         else { throw APIError.dataNotValid }
