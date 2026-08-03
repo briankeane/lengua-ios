@@ -7,7 +7,7 @@ import Testing
 @testable import Lengua
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .isolatedSharedState)
 struct YouPageModelTests {
   /// Runs `body` with `defaultAppStorage` overridden to a fresh in-memory
   /// `UserDefaults`, so any `@Shared(.translationProviderKind)` touched inside

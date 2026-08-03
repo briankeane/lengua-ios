@@ -9,7 +9,7 @@ import Testing
 @testable import Lengua
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .isolatedSharedState)
 struct VocabItemsClientTests {
   private nonisolated func item(id: String, familiarity: Int = 0) -> VocabItem {
     VocabItem(

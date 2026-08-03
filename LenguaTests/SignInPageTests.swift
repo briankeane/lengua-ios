@@ -9,6 +9,7 @@ import Testing
 @testable import Lengua
 
 @MainActor
+@Suite(.serialized, .isolatedSharedState)
 struct SignInPageTests {
   @Test func displayTextMatchesMockup() {
     @Shared(.auth) var auth = Auth()

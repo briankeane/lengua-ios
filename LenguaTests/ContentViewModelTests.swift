@@ -7,7 +7,7 @@ import Testing
 @testable import Lengua
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .isolatedSharedState)
 struct ContentViewModelTests {
   @Test func authStateChangedRefreshesWhenLoggedIn() async {
     let refreshes = LockIsolated(0)

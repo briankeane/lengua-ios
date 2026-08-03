@@ -6,7 +6,7 @@ import Testing
 
 @testable import Lengua
 
-@Suite(.serialized)
+@Suite(.serialized, .isolatedSharedState)
 @MainActor
 struct TranslatePageModelTests {
   @Test func initialLabelsAreEnglishToSpanish() {
