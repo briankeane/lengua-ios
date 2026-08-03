@@ -69,21 +69,21 @@ final class ReviewSessionModel: ViewModel {
 
   // MARK: - Private Helpers
   private func grade(_ outcome: ReviewOutcome) async {
-    guard let card = current, !isSubmittingGrade else { return }
+    guard let card = current, !isSubmittingGrade, !isClosed else { return }
     isSubmittingGrade = true
     submitFailed = false
     pendingOutcome = outcome
     do {
       let updated = try await api.submitReview(card.vocabItemId, card.direction, outcome)
+      isSubmittingGrade = false
       guard !isClosed else { return }
       $vocabItems.withLock { $0.items[id: updated.id] = updated }
       applyOutcome(outcome, for: card)
       resetCardState()
-      isSubmittingGrade = false
     } catch {
+      isSubmittingGrade = false
       guard !isClosed else { return }
       submitFailed = true
-      isSubmittingGrade = false
     }
   }
 
