@@ -33,6 +33,18 @@ struct APIClient: Sendable {
   /// owned by someone else; both mean "no longer exists", so both resolve without
   /// error.
   var deleteVocabItem: @Sendable (_ id: String) async throws -> Void
+
+  /// Fetches the caller's due review cards (auth required). `direction == nil` ⇒ "any".
+  var getReviewQueue:
+    @Sendable (
+      _ direction: ReviewDirection?, _ limit: Int?, _ targetLanguageCode: String?
+    ) async throws -> ReviewQueue
+
+  /// Records the outcome of reviewing one track of one card and returns the updated item.
+  var submitReview:
+    @Sendable (
+      _ vocabItemId: String, _ direction: ReviewDirection, _ outcome: ReviewOutcome
+    ) async throws -> VocabItem
 }
 
 struct GoogleSignInResult: Equatable, Sendable {
@@ -75,6 +87,12 @@ struct VocabItemsResponse: Decodable {
   }
   let vocabItems: [VocabItem]
   let pagination: Pagination
+}
+
+/// Decodes the `GET /v1/vocab-items/review` response envelope.
+struct ReviewQueueResponse: Decodable {
+  let reviewCards: [ReviewCard]
+  let dueCounts: DueCounts
 }
 
 enum APIError: Error, LocalizedError {

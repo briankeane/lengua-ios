@@ -14,7 +14,7 @@ enum ReviewOutcome: String, Codable, Sendable {
 }
 
 /// A single flashcard due for review: one `VocabItem` in one `ReviewDirection`.
-struct ReviewCard: Equatable, Sendable, Identifiable {
+struct ReviewCard: Codable, Equatable, Sendable, Identifiable {
   let vocabItemId: String
   let sourceText: String
   let targetText: String
