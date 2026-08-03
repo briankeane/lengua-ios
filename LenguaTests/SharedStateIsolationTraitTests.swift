@@ -63,4 +63,22 @@ struct SharedStateIsolationTraitTests {
       expectNoDifference(vocabItems.isLoading, false)  // storageB was never mutated
     }
   }
+
+  /// Guards the *routing* the annotation relies on, not just the scope's effect.
+  /// `.isolatedSharedState` isolates each test only if `scopeProvider` vends a
+  /// scope per test case (never for the suite as a whole) and `isRecursive` lets
+  /// the trait reach a suite's contained tests. If either regressed — e.g.
+  /// `isRecursive` flipped to `false`, or `scopeProvider` scoped the suite
+  /// instead of each test — annotated suites would silently share one store and
+  /// the parallel races would return, yet `provideScopeInstallsFreshInMemoryStorage`
+  /// would keep passing. This test fails in exactly those cases.
+  @Test func scopeProviderRoutesPerTestCaseNotPerSuite() throws {
+    let trait = SharedStateIsolationTrait()
+    let test = try #require(Test.current)
+    let testCase = try #require(Test.Case.current)
+
+    #expect(trait.isRecursive)  // must recurse into a suite's contained tests
+    #expect(trait.scopeProvider(for: test, testCase: testCase) != nil)  // scope each test
+    #expect(trait.scopeProvider(for: test, testCase: nil) == nil)  // not the suite as a whole
+  }
 }
