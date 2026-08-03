@@ -1,12 +1,108 @@
 import CustomDump
-import XCTest
+import Dependencies
+import Foundation
+import Sharing
+import Testing
 
 @testable import Lengua
 
 @MainActor
-final class ReviewPageModelTests: XCTestCase {
-  func testTitleIsReview() {
+@Suite(.serialized) struct ReviewPageModelTests {
+  @Test func navigationTitleIsReview() {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    expectNoDifference(ReviewPageModel().navigationTitle, "Review")
+  }
+
+  @Test func modeMapsToDirection() {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
     let model = ReviewPageModel()
-    expectNoDifference(model.title, "Review")
+    model.mode = .adaptive
+    expectNoDifference(model.direction, nil)
+    model.mode = .recognition
+    expectNoDifference(model.direction, .receptive)
+    model.mode = .production
+    expectNoDifference(model.direction, .productive)
+  }
+
+  @Test func dueSummaryPluralizesAndReportsCaughtUp() async {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+
+    let model = withDependencies {
+      $0.api.getReviewQueue = { _, _, _ in
+        ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 1, productive: 3, total: 4))
+      }
+    } operation: {
+      ReviewPageModel()
+    }
+    await model.viewAppeared()
+    expectNoDifference(model.dueSummary, "1 to recognize · 3 to produce")
+
+    let caughtUpModel = withDependencies {
+      $0.api.getReviewQueue = { _, _, _ in
+        ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 0, productive: 0, total: 0))
+      }
+    } operation: {
+      ReviewPageModel()
+    }
+    await caughtUpModel.viewAppeared()
+    expectNoDifference(caughtUpModel.dueSummary, "All caught up 🎉")
+  }
+
+  @Test func emptyStateDistinguishesNoWordsFromNoneDue() async {
+    @Shared(.vocabItems) var vocabItems = VocabItems()  // no items
+
+    let model = withDependencies {
+      $0.api.getReviewQueue = { _, _, _ in
+        ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 0, productive: 0, total: 0))
+      }
+    } operation: {
+      ReviewPageModel()
+    }
+    await model.viewAppeared()
+    expectNoDifference(model.noWordsSaved, true)
+    expectNoDifference(model.emptyStateText, "Save some words to review them here.")
+
+    $vocabItems.withLock {
+      $0.items[id: "a"] = VocabItem(
+        id: "a", targetLanguageCode: "es", sourceText: "s", targetText: "t")
+    }
+
+    let model2 = withDependencies {
+      $0.api.getReviewQueue = { _, _, _ in
+        ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 0, productive: 0, total: 0))
+      }
+    } operation: {
+      ReviewPageModel()
+    }
+    await model2.viewAppeared()
+    expectNoDifference(model2.noWordsSaved, false)
+    expectNoDifference(model2.emptyStateText, "You're all caught up — check back later.")
+  }
+
+  @Test func startCreatesSessionOnlyWhenBatchNonEmpty() async {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    let card = ReviewCard(
+      vocabItemId: "a", sourceText: "s", targetText: "t",
+      targetLanguageCode: "es", direction: .receptive, familiarity: 0, nextDueAt: nil)
+
+    let model = withDependencies {
+      $0.api.getReviewQueue = { _, _, _ in
+        ReviewQueue(cards: [card], dueCounts: DueCounts(receptive: 1, productive: 0, total: 1))
+      }
+    } operation: {
+      ReviewPageModel()
+    }
+    await model.startReviewingButtonTapped()
+    #expect(model.session != nil)
+
+    let emptyModel = withDependencies {
+      $0.api.getReviewQueue = { _, _, _ in
+        ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 0, productive: 0, total: 0))
+      }
+    } operation: {
+      ReviewPageModel()
+    }
+    await emptyModel.startReviewingButtonTapped()
+    #expect(emptyModel.session == nil)
   }
 }
