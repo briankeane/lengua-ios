@@ -1,3 +1,4 @@
+import ConcurrencyExtras
 import CustomDump
 import Dependencies
 import Foundation
@@ -77,6 +78,46 @@ import Testing
     await model2.viewAppeared()
     expectNoDifference(model2.noWordsSaved, false)
     expectNoDifference(model2.emptyStateText, "You're all caught up — check back later.")
+  }
+
+  @Test func showsEmptyStateWaitsForFirstFetchThenReflectsZeroCounts() async {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+
+    let model = withDependencies {
+      $0.api.getReviewQueue = { _, _, _ in
+        ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 0, productive: 0, total: 0))
+      }
+    } operation: {
+      ReviewPageModel()
+    }
+    expectNoDifference(model.showsEmptyState, false)
+
+    await model.viewAppeared()
+    expectNoDifference(model.showsEmptyState, true)
+  }
+
+  @Test func fetchFailureSetsLoadFailedAndRetrySucceedsClearsIt() async {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    let attempts = LockIsolated(0)
+
+    let model = withDependencies {
+      $0.api.getReviewQueue = { _, _, _ in
+        attempts.withValue { $0 += 1 }
+        if attempts.value == 1 { throw APIError.dataNotValid }
+        return ReviewQueue(
+          cards: [], dueCounts: DueCounts(receptive: 1, productive: 0, total: 1))
+      }
+    } operation: {
+      ReviewPageModel()
+    }
+
+    await model.viewAppeared()
+    expectNoDifference(model.loadFailed, true)
+    expectNoDifference(model.isLoading, false)
+
+    await model.retryButtonTapped()
+    expectNoDifference(model.loadFailed, false)
+    expectNoDifference(model.isLoading, false)
   }
 
   @Test func startCreatesSessionOnlyWhenBatchNonEmpty() async {

@@ -16,7 +16,7 @@ final class ReviewPageModel: ViewModel {
   override init() { super.init() }
 
   // MARK: - Properties
-  enum ReviewMode: CaseIterable, Sendable {
+  enum ReviewMode: CaseIterable, Equatable, Hashable, Sendable {
     case adaptive
     case recognition
     case production
