@@ -171,6 +171,36 @@ import Testing
     expectNoDifference(refreshes.value, 1)
   }
 
+  @Test func selectedModeDueCountReflectsModeWhenOtherTrackHasNoneDue() async {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+
+    let model = withDependencies {
+      $0.api.getReviewQueue = { _, _, _ in
+        ReviewQueue(cards: [], dueCounts: DueCounts(receptive: 0, productive: 3, total: 3))
+      }
+      $0.vocabItemsClient.refresh = {}
+    } operation: {
+      ReviewPageModel()
+    }
+    await model.viewAppeared()
+
+    model.mode = .recognition
+    expectNoDifference(model.selectedModeDueCount, 0)
+    expectNoDifference(model.canStartReview, false)
+    expectNoDifference(
+      model.modeEmptyHint, "Nothing to recognize right now — try Adaptive or Production.")
+
+    model.mode = .production
+    expectNoDifference(model.selectedModeDueCount, 3)
+    expectNoDifference(model.canStartReview, true)
+    expectNoDifference(model.modeEmptyHint, nil)
+
+    model.mode = .adaptive
+    expectNoDifference(model.selectedModeDueCount, 3)
+    expectNoDifference(model.canStartReview, true)
+    expectNoDifference(model.modeEmptyHint, nil)
+  }
+
   @Test func hubStringHelpersAreStable() {
     @Shared(.vocabItems) var vocabItems = VocabItems()
     let model = ReviewPageModel()

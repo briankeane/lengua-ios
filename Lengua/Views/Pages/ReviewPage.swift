@@ -93,6 +93,26 @@ final class ReviewPageModel: ViewModel {
   var noWordsSaved: Bool { vocabItems.items.isEmpty }
   var showsEmptyState: Bool { dueCounts != nil && totalDue == 0 }
 
+  var selectedModeDueCount: Int {
+    guard let dueCounts else { return 0 }
+    switch mode {
+    case .adaptive: return dueCounts.total
+    case .recognition: return dueCounts.receptive
+    case .production: return dueCounts.productive
+    }
+  }
+
+  var canStartReview: Bool { selectedModeDueCount > 0 }
+
+  var modeEmptyHint: String? {
+    guard let dueCounts, dueCounts.total > 0, selectedModeDueCount == 0 else { return nil }
+    switch mode {
+    case .recognition: return "Nothing to recognize right now — try Adaptive or Production."
+    case .production: return "Nothing to produce right now — try Adaptive or Recognition."
+    case .adaptive: return nil
+    }
+  }
+
   var dueSummary: String {
     guard let dueCounts, dueCounts.total > 0 else { return "All caught up 🎉" }
     return "\(dueCounts.receptive) to recognize · \(dueCounts.productive) to produce"
@@ -192,6 +212,12 @@ struct ReviewPage: View {
       }
       .pickerStyle(.segmented)
       startButton
+      if let hint = model.modeEmptyHint {
+        Text(hint)
+          .font(.footnote)
+          .foregroundStyle(.white.opacity(0.85))
+          .multilineTextAlignment(.center)
+      }
       Spacer()
     }
   }
@@ -207,6 +233,8 @@ struct ReviewPage: View {
         .frame(height: 56)
         .background(Capsule().fill(deepBlue))
     }
+    .disabled(!model.canStartReview)
+    .opacity(model.canStartReview ? 1 : 0.5)
   }
 
   private func centeredMessage<Action: View>(
