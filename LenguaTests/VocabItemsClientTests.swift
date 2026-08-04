@@ -14,9 +14,7 @@ struct VocabItemsClientTests {
   private nonisolated func item(id: String, familiarity: Int = 0) -> VocabItem {
     VocabItem(
       id: id, targetLanguageCode: "es", sourceText: "s", targetText: "t",
-      familiarity: familiarity, lastSeenAt: nil, timesSeen: 0, timesCorrect: 0,
-      timesIncorrect: 0, lastOutcome: nil, nextDueAt: nil,
-      createdAt: Date(timeIntervalSince1970: 0), updatedAt: Date(timeIntervalSince1970: 0))
+      receptiveFamiliarity: familiarity)
   }
 
   @Test func refreshLoadsAllPagesIntoSharedState() async {

@@ -74,9 +74,9 @@ extension APIClient: DependencyKey {
           headers: [.authorization(bearerToken: token)]
         ).serializingData().response
 
-        guard let httpResponse = response.response,
-          (200..<300).contains(httpResponse.statusCode),
-          let data = response.data
+        guard let httpResponse = response.response else { throw APIError.dataNotValid }
+        if httpResponse.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(httpResponse.statusCode), let data = response.data
         else { throw APIError.dataNotValid }
 
         guard
@@ -145,6 +145,54 @@ extension APIClient: DependencyKey {
         }
         if httpResponse.statusCode == 401 { throw APIError.unauthorized }
         throw APIError.dataNotValid
+      },
+      getReviewQueue: { direction, limit, targetLanguageCode in
+        @Shared(.auth) var auth
+        guard let token = auth.jwtToken, !token.isEmpty else { throw APIError.unauthorized }
+
+        let url = baseUrl.appendingPathComponent("v1/vocab-items/review")
+        var parameters: [String: Any] = ["limit": limit ?? 20]
+        if let direction { parameters["direction"] = direction.rawValue }
+        if let targetLanguageCode { parameters["targetLanguageCode"] = targetLanguageCode }
+
+        let response = await session.request(
+          url, parameters: parameters, encoding: URLEncoding.default,
+          headers: [.authorization(bearerToken: token)]
+        ).serializingData().response
+
+        guard let httpResponse = response.response else { throw APIError.dataNotValid }
+        if httpResponse.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(httpResponse.statusCode), let data = response.data else {
+          throw APIError.dataNotValid
+        }
+        guard
+          let decoded = try? JSONDecoder.lenguaISO8601.decode(ReviewQueueResponse.self, from: data)
+        else { throw APIError.dataNotValid }
+        return ReviewQueue(cards: decoded.reviewCards, dueCounts: decoded.dueCounts)
+      },
+      submitReview: { vocabItemId, direction, outcome in
+        @Shared(.auth) var auth
+        guard let token = auth.jwtToken, !token.isEmpty else { throw APIError.unauthorized }
+
+        let url = baseUrl.appendingPathComponent("v1/vocab-items/\(vocabItemId)/review")
+        let response = await session.request(
+          url, method: .post,
+          parameters: ["direction": direction.rawValue, "outcome": outcome.rawValue],
+          encoding: JSONEncoding.default,
+          headers: [.authorization(bearerToken: token)]
+        ).serializingData().response
+
+        guard let httpResponse = response.response else {
+          throw response.error ?? APIError.dataNotValid
+        }
+        if httpResponse.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(httpResponse.statusCode), let data = response.data else {
+          let body = response.data.flatMap { String(data: $0, encoding: .utf8) }
+          throw APIError.validationError(body ?? "Review failed (\(httpResponse.statusCode))")
+        }
+        guard let item = try? JSONDecoder.lenguaISO8601.decode(VocabItem.self, from: data)
+        else { throw APIError.dataNotValid }
+        return item
       }
     )
   }()

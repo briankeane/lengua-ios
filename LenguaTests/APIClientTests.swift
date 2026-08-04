@@ -53,11 +53,7 @@ struct APIClientTests {
           items: [
             VocabItem(
               id: "1", targetLanguageCode: "es", sourceText: "dog",
-              targetText: "perro", familiarity: 0, lastSeenAt: nil,
-              timesSeen: 0, timesCorrect: 0, timesIncorrect: 0,
-              lastOutcome: nil, nextDueAt: nil,
-              createdAt: Date(timeIntervalSince1970: 0),
-              updatedAt: Date(timeIntervalSince1970: 0))
+              targetText: "perro")
           ],
           nextCursor: "next-token")
       }
@@ -75,9 +71,11 @@ struct APIClientTests {
       {
         "vocabItems": [
           { "id": "1", "targetLanguageCode": "es", "sourceText": "dog",
-            "targetText": "perro", "familiarity": 2, "lastSeenAt": null,
-            "timesSeen": 0, "timesCorrect": 0, "timesIncorrect": 0,
-            "lastOutcome": null, "nextDueAt": null,
+            "targetText": "perro",
+            "receptive": { "familiarity": 2, "lastSeenAt": null, "timesSeen": 0,
+              "timesCorrect": 0, "timesIncorrect": 0, "lastOutcome": null, "nextDueAt": null },
+            "productive": { "familiarity": 0, "lastSeenAt": null, "timesSeen": 0,
+              "timesCorrect": 0, "timesIncorrect": 0, "lastOutcome": null, "nextDueAt": null },
             "createdAt": "2026-08-01T10:00:00.000Z",
             "updatedAt": "2026-08-01T10:00:00.000Z" }
         ],
@@ -99,13 +97,10 @@ struct APIClientTests {
         "sourceText": "the dog",
         "targetText": "el perro",
         "targetTextNormalized": "el perro",
-        "familiarity": 0,
-        "lastSeenAt": null,
-        "timesSeen": 0,
-        "timesCorrect": 0,
-        "timesIncorrect": 0,
-        "lastOutcome": null,
-        "nextDueAt": null,
+        "receptive": { "familiarity": 0, "lastSeenAt": null, "timesSeen": 0,
+          "timesCorrect": 0, "timesIncorrect": 0, "lastOutcome": null, "nextDueAt": null },
+        "productive": { "familiarity": 0, "lastSeenAt": null, "timesSeen": 0,
+          "timesCorrect": 0, "timesIncorrect": 0, "lastOutcome": null, "nextDueAt": null },
         "createdAt": "2026-08-01T00:00:00.000Z",
         "updatedAt": "2026-08-01T00:00:00.000Z"
       }

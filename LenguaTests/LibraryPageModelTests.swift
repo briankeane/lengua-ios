@@ -16,10 +16,8 @@ struct LibraryPageModelTests {
   ) -> VocabItem {
     VocabItem(
       id: id, targetLanguageCode: "es", sourceText: source, targetText: target,
-      familiarity: familiarity, lastSeenAt: nil, timesSeen: 0, timesCorrect: 0,
-      timesIncorrect: 0, lastOutcome: nil, nextDueAt: nil,
-      createdAt: Date(timeIntervalSince1970: created),
-      updatedAt: Date(timeIntervalSince1970: created))
+      receptiveFamiliarity: familiarity,
+      createdAt: Date(timeIntervalSince1970: created))
   }
 
   @Test func navigationTitleIsLibrary() {
@@ -82,15 +80,29 @@ struct LibraryPageModelTests {
     expectNoDifference(model.sortedItems.map(\.id), ["new", "mid", "old"])
   }
 
-  @Test func familiaritySortIsAscending() {
+  @Test func familiaritySortOrdersByWeakestThenStrongestSkill() {
+    func item(id: String, receptive: Int, productive: Int) -> VocabItem {
+      VocabItem(
+        id: id, targetLanguageCode: "es", sourceText: "y", targetText: "x",
+        receptiveFamiliarity: receptive, productiveFamiliarity: productive)
+    }
     @Shared(.vocabItems) var vocabItems = VocabItems(
       items: [
-        item(id: "known", familiarity: 5), item(id: "new", familiarity: 0),
-        item(id: "learning", familiarity: 2),
+        item(id: "even", receptive: 3, productive: 3),  // key (3,3)
+        item(id: "weakHighMax", receptive: 5, productive: 1),  // key (1,5)
+        item(id: "zero", receptive: 0, productive: 0),  // key (0,0)
+        item(id: "weakLowMax", receptive: 1, productive: 4),  // key (1,4)
       ])
     let model = LibraryPageModel()
     model.sortMode = .familiarity
-    expectNoDifference(model.sortedItems.map(\.id), ["new", "learning", "known"])
+    expectNoDifference(
+      model.sortedItems.map(\.id),
+      ["zero", "weakLowMax", "weakHighMax", "even"])
+  }
+
+  @Test func familiaritySortModeLabelIsWeakestSkill() {
+    @Shared(.vocabItems) var vocabItems = VocabItems()
+    expectNoDifference(LibraryPageModel().sortModeLabel(.familiarity), "Weakest skill")
   }
 
   @Test func deleteButtonTappedRemovesItem() async {

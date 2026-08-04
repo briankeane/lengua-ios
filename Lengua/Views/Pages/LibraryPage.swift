@@ -57,7 +57,7 @@ final class LibraryPageModel: ViewModel {
     switch mode {
     case .date: return "Date"
     case .alphabetical: return "Alphabetical"
-    case .familiarity: return "Familiarity"
+    case .familiarity: return "Weakest skill"
     }
   }
 
@@ -83,9 +83,16 @@ final class LibraryPageModel: ViewModel {
       }
     case .familiarity:
       return vocabItems.items.sorted { lhs, rhs in
-        lhs.familiarity != rhs.familiarity
-          ? lhs.familiarity < rhs.familiarity
-          : lhs.createdAt > rhs.createdAt
+        let lhsKey = (
+          min(lhs.receptive.familiarity, lhs.productive.familiarity),
+          max(lhs.receptive.familiarity, lhs.productive.familiarity)
+        )
+        let rhsKey = (
+          min(rhs.receptive.familiarity, rhs.productive.familiarity),
+          max(rhs.receptive.familiarity, rhs.productive.familiarity)
+        )
+        if lhsKey != rhsKey { return lhsKey < rhsKey }
+        return lhs.createdAt > rhs.createdAt
       }
     }
   }
