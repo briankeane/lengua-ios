@@ -8,7 +8,7 @@ import Testing
 @testable import Lengua
 
 @MainActor
-@Suite(.serialized) struct ReviewPageModelTests {
+@Suite(.serialized, .isolatedSharedState) struct ReviewPageModelTests {
   @Test func navigationTitleIsReview() {
     @Shared(.vocabItems) var vocabItems = VocabItems()
     expectNoDifference(ReviewPageModel().navigationTitle, "Review")

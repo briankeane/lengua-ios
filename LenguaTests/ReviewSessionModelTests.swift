@@ -8,7 +8,7 @@ import Testing
 @testable import Lengua
 
 @MainActor
-@Suite(.serialized) struct ReviewSessionModelTests {
+@Suite(.serialized, .isolatedSharedState) struct ReviewSessionModelTests {
   private nonisolated func card(_ id: String, _ dir: ReviewDirection = .receptive) -> ReviewCard {
     ReviewCard(
       vocabItemId: id, sourceText: "s-\(id)", targetText: "t-\(id)",
