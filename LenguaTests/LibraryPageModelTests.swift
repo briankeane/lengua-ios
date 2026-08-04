@@ -8,7 +8,7 @@ import Testing
 @testable import Lengua
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .isolatedSharedState)
 struct LibraryPageModelTests {
   private func item(
     id: String, target: String = "x", source: String = "y",
