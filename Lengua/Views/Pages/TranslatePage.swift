@@ -407,7 +407,6 @@ extension TranslatePageModel {
     isTranslating ? "Working on device" : "Listen"
   }
 
-  var doneButtonTitle: String { "Done" }
   var saveButtonTitle: String {
     if isTranslating { return "Translating…" }
     switch saveState {
@@ -512,12 +511,6 @@ struct TranslatePage: View {
     .scrollDismissesKeyboard(.interactively)
     .background(Color.brand.ignoresSafeArea())
     .lenguaAlert($model.presentedAlert)
-    .toolbar {
-      ToolbarItemGroup(placement: .keyboard) {
-        Spacer()
-        Button(model.doneButtonTitle) { isInputFocused = false }
-      }
-    }
     .onChange(of: isInputFocused) { _, focused in
       // Match the iOS keyboard's show/hide timing so the layout shrinks and grows
       // in lockstep with the keyboard sliding in and out.
@@ -598,10 +591,13 @@ struct TranslatePage: View {
           }
         }
       }
-      TextField(model.inputPlaceholder, text: $model.inputText, axis: .vertical)
+      TextField(model.inputPlaceholder, text: $model.inputText)
         .font(metrics.cardBodyFont)
         .foregroundStyle(Color.ink)
+        .lineLimit(1)
         .focused($isInputFocused)
+        .submitLabel(.done)
+        .onSubmit { isInputFocused = false }
       Spacer(minLength: metrics.cardSpacing)
       HStack(alignment: .bottom) {
         Text(isCompact ? model.compactInputHint : model.inputHint)

@@ -16,11 +16,6 @@ struct TranslatePageModelTests {
     expectNoDifference(model.inputPlaceholder, "Type or speak English")
   }
 
-  @Test func doneButtonDismissesKeyboardTitle() {
-    let model = TranslatePageModel()
-    expectNoDifference(model.doneButtonTitle, "Done")
-  }
-
   @Test func typingTranslatesAfterDebounce() async {
     let clock = TestClock()
     let model = withDependencies {
