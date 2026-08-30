@@ -40,6 +40,7 @@ final class TranslatePageModel: ViewModel {
   }
   var isTranslating = false
   var isRecording = false
+  var recordingElapsed = 0
   var saveState: SaveState = .idle
   var presentedAlert: LenguaAlert?
 
@@ -55,6 +56,7 @@ final class TranslatePageModel: ViewModel {
 
   @ObservationIgnored private(set) var translationTask: Task<Void, Never>?
   @ObservationIgnored private(set) var recognitionTask: Task<Void, Never>?
+  @ObservationIgnored private(set) var recordingTimerTask: Task<Void, Never>?
   @ObservationIgnored private(set) var downloadTask: Task<Void, Never>?
   /// Directions already auto-prompted this model lifetime. The auto gate: the
   /// sheet is auto-provoked at most once per direction, so a dismissal never
@@ -78,6 +80,14 @@ final class TranslatePageModel: ViewModel {
     let previousInput = inputText
     inputText = outputText  // didSet schedules a fresh translation
     outputText = previousInput  // show the swapped text immediately
+  }
+
+  func clearButtonTapped() {
+    translationTask?.cancel()
+    recognitionTask?.cancel()
+    inputText = ""
+    outputText = ""
+    saveState = .idle
   }
 
   func downloadButtonTapped() {
@@ -160,7 +170,10 @@ final class TranslatePageModel: ViewModel {
     isRecording = true
     recognitionTask = Task { @MainActor [weak self] in
       guard let self else { return }
-      defer { isRecording = false }
+      defer {
+        isRecording = false
+        recordingTimerTask?.cancel()
+      }
       let status = await speechRecognizer.requestAuthorization()
       // The permission prompt is an async suspension point: if a second tap or
       // `pageDisappeared()` cancelled us while it was up, bail before turning on
@@ -174,6 +187,9 @@ final class TranslatePageModel: ViewModel {
       // .record session so the two never fight over the shared audio session.
       await speechSynthesizer.stop()
       guard !Task.isCancelled else { return }
+      // Start the elapsed timer only once dictation is actually about to begin, so
+      // it never counts time spent on the (first-use) permission prompt.
+      startRecordingTimer()
       do {
         let stream = try await speechRecognizer.start(direction.speechRecognitionLocaleIdentifier)
         for try await result in stream {
@@ -190,44 +206,23 @@ final class TranslatePageModel: ViewModel {
     }
   }
 
-  // MARK: - View Helpers
-  var inputLabel: String { direction.inputLabel }
-  var outputLabel: String { direction.outputLabel }
-  var inputPlaceholder: String {
-    switch direction {
-    case .englishToSpanish: "Type or speak English"
-    case .spanishToEnglish: "Type or speak Spanish"
-    }
-  }
-  var outputPlaceholder: String { direction.outputLabel }
-  var outputIsPlaceholder: Bool { outputText.isEmpty }
-  var outputDisplayText: String { outputText.isEmpty ? outputPlaceholder : outputText }
-  var speakItHint: String { "Speak it" }
-  var doneButtonTitle: String { "Done" }
-  var saveButtonTitle: String {
-    switch saveState {
-    case .idle: "Save to Vocabulary"
-    case .saving: "Saving…"
-    case .saved: "Saved"
-    }
-  }
-  var isSaveEnabled: Bool {
-    // `isTranslating` guards the stale window: after editing the source, the old
-    // output is still visible until retranslation lands, and saving then would
-    // persist the new source paired with the previous target.
-    saveState == .idle && !isTranslating
-      && !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-  }
-
-  /// Whether to show the download affordance in place of the (blank) output —
-  /// true only when the current direction's model needs downloading.
-  var showsDownloadPrompt: Bool { downloadRequiredDirection == direction }
-  var downloadPromptText: String {
-    "\(direction.outputLabel) translation needs to be downloaded."
-  }
-  var downloadButtonTitle: String { "Download" }
-
   // MARK: - Private Helpers
+  private var formattedRecordingTime: String {
+    String(format: "%d:%02d", recordingElapsed / 60, recordingElapsed % 60)
+  }
+
+  private func startRecordingTimer() {
+    recordingTimerTask?.cancel()
+    recordingElapsed = 0
+    recordingTimerTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      while !Task.isCancelled {
+        do { try await clock.sleep(for: .seconds(1)) } catch { return }
+        recordingElapsed += 1
+      }
+    }
+  }
+
   /// The save request for the currently-visible term, or `nil` when there is
   /// nothing to save. Used as an identity to detect edits/swaps mid-save.
   private var currentSaveRequest: SaveVocabItemRequest? {
@@ -368,33 +363,92 @@ final class TranslatePageModel: ViewModel {
   }
 }
 
+// MARK: - View Helpers
+extension TranslatePageModel {
+  var pageTitle: String { "Look up" }
+  var directionSubtitle: String { "\(direction.inputLabel) → \(direction.outputLabel)" }
+  var clearButtonTitle: String { "Clear" }
+  var isClearVisible: Bool {
+    !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  var inputLabel: String { direction.inputLabel }
+  var outputLabel: String { direction.outputLabel }
+  var inputPlaceholder: String {
+    switch direction {
+    case .englishToSpanish: "Type or speak English"
+    case .spanishToEnglish: "Type or speak Spanish"
+    }
+  }
+  var inputHint: String {
+    isRecording ? "Listening · \(formattedRecordingTime)" : "Tap the mic to speak"
+  }
+
+  var outputPlaceholder: String { direction.outputLabel }
+  var outputIsPlaceholder: Bool { outputText.isEmpty }
+  var outputDisplayText: String { outputText.isEmpty ? outputPlaceholder : outputText }
+  var outputStatusLabel: String {
+    let base = direction.outputLabel.uppercased()
+    if isTranslating { return "\(base) · TRANSLATING…" }
+    if !outputText.isEmpty { return "\(base) · READY" }
+    return base
+  }
+  var outputBodyText: String {
+    isTranslating ? "Translating your phrase…" : outputDisplayText
+  }
+  var outputHint: String {
+    isTranslating ? "Working on device" : "Listen"
+  }
+
+  var doneButtonTitle: String { "Done" }
+  var saveButtonTitle: String {
+    if isTranslating { return "Translating…" }
+    switch saveState {
+    case .idle: return "Save to Library"
+    case .saving: return "Saving…"
+    case .saved: return "Saved"
+    }
+  }
+  var isSaveEnabled: Bool {
+    // `isTranslating` guards the stale window: after editing the source, the old
+    // output is still visible until retranslation lands, and saving then would
+    // persist the new source paired with the previous target.
+    saveState == .idle && !isTranslating
+      && !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  /// Whether to show the download affordance in place of the (blank) output —
+  /// true only when the current direction's model needs downloading.
+  var showsDownloadPrompt: Bool { downloadRequiredDirection == direction }
+  var downloadPromptText: String {
+    "\(direction.outputLabel) translation needs to be downloaded."
+  }
+  var downloadButtonTitle: String { "Download" }
+}
+
 struct TranslatePage: View {
   @State var model: TranslatePageModel
   @FocusState private var isInputFocused: Bool
 
-  private let pageBlue = Color(red: 0.24, green: 0.29, blue: 0.85)
-  private let deepBlue = Color(red: 0.15, green: 0.20, blue: 0.55)
-  private let inputCardColor = Color(red: 0.98, green: 0.98, blue: 0.96)
-  private let outputCardColor = Color(red: 0.87, green: 0.89, blue: 0.98)
-
   var body: some View {
     GeometryReader { proxy in
       ScrollView {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 14) {
+          header
           inputCard
-          swapButton
-            .padding(.vertical, -20)
-            .zIndex(1)
+          swapRow
           outputCard
           saveButton
-            .padding(.top, 16)
         }
+        .padding(.top, 14)
         .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
       }
     }
     .scrollDismissesKeyboard(.interactively)
-    .background(pageBlue.ignoresSafeArea())
+    .background(Color.brand.ignoresSafeArea())
     .lenguaAlert($model.presentedAlert)
     .toolbar {
       ToolbarItemGroup(placement: .keyboard) {
@@ -406,93 +460,141 @@ struct TranslatePage: View {
     .onDisappear { model.pageDisappeared() }
   }
 
+  private var header: some View {
+    HStack(alignment: .top) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(model.pageTitle)
+          .font(.funnel(32, weight: .bold))
+          .foregroundStyle(.white)
+        Text(model.directionSubtitle)
+          .font(.inter(13))
+          .foregroundStyle(.white.opacity(0.73))
+      }
+      Spacer()
+      if model.isClearVisible {
+        Button {
+          model.clearButtonTapped()
+        } label: {
+          Text(model.clearButtonTitle)
+            .font(.inter(12, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.vertical, 7)
+            .padding(.horizontal, 10)
+            .background(Capsule().fill(Color.white.opacity(0.133)))
+        }
+      }
+    }
+  }
+
   private var inputCard: some View {
     VStack(alignment: .leading, spacing: 12) {
       Text(model.inputLabel)
-        .font(.subheadline).fontWeight(.semibold)
+        .font(.inter(12, weight: .bold))
         .textCase(.uppercase)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Color.muted)
       TextField(model.inputPlaceholder, text: $model.inputText, axis: .vertical)
-        .font(.largeTitle)
-        .foregroundStyle(.primary)
+        .font(.funnel(27, weight: .bold))
+        .foregroundStyle(Color.ink)
         .focused($isInputFocused)
-      Spacer(minLength: 24)
+      Spacer(minLength: 12)
       HStack(alignment: .bottom) {
-        Text(model.speakItHint)
-          .foregroundStyle(.secondary)
+        Text(model.inputHint)
+          .font(.inter(14, weight: model.isRecording ? .bold : .regular))
+          .foregroundStyle(model.isRecording ? Color.danger : Color.muted)
         Spacer()
         Button(action: model.micButtonTapped) {
           Image(systemName: model.isRecording ? "stop.fill" : "mic.fill")
-            .font(.title2)
+            .font(.system(size: 20, weight: .semibold))
             .foregroundStyle(.white)
-            .frame(width: 56, height: 56)
-            .background(Circle().fill(model.isRecording ? deepBlue : pageBlue))
+            .frame(width: 48, height: 48)
+            .background(Circle().fill(model.isRecording ? Color.danger : Color.brandDeep))
         }
       }
     }
     .padding(20)
-    .frame(maxWidth: .infinity, minHeight: 300, alignment: .topLeading)
-    .background(RoundedRectangle(cornerRadius: 20).fill(inputCardColor))
+    .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
+    .background(RoundedRectangle(cornerRadius: DesignRadius.card).fill(Color.surface))
   }
 
   private var outputCard: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text(model.outputLabel)
-        .font(.subheadline).fontWeight(.semibold)
-        .textCase(.uppercase)
-        .foregroundStyle(deepBlue)
+      Text(model.outputStatusLabel)
+        .font(.inter(12, weight: .bold))
+        .foregroundStyle(Color.brandDeep)
       if model.showsDownloadPrompt {
         downloadPrompt
       } else {
-        Text(model.outputDisplayText)
-          .font(.largeTitle).fontWeight(.semibold)
-          .foregroundStyle(model.outputIsPlaceholder ? deepBlue.opacity(0.45) : deepBlue)
+        Text(model.outputBodyText)
+          .font(.funnel(model.isTranslating ? 24 : 27, weight: .bold))
+          .foregroundStyle(Color.brandDeep.opacity(outputBodyOpacity))
       }
-      Spacer(minLength: 24)
+      Spacer(minLength: 12)
       HStack(alignment: .bottom) {
+        Text(model.outputHint)
+          .font(.inter(14))
+          .foregroundStyle(Color.brandDeep)
         Spacer()
         Button {
           Task { await model.speakerButtonTapped() }
         } label: {
-          Image(systemName: "speaker.wave.2.fill")
-            .font(.title2)
-            .foregroundStyle(deepBlue)
-            .frame(width: 56, height: 56)
-            .background(Circle().stroke(deepBlue.opacity(0.3), lineWidth: 1))
+          outputActionGlyph
+            .frame(width: 48, height: 48)
+            .background(Circle().fill(Color.brandDeep))
         }
+        .disabled(model.isTranslating)
       }
     }
     .padding(20)
-    .frame(maxWidth: .infinity, minHeight: 260, alignment: .topLeading)
-    .background(RoundedRectangle(cornerRadius: 20).fill(outputCardColor))
+    .frame(maxWidth: .infinity, minHeight: 196, alignment: .topLeading)
+    .background(RoundedRectangle(cornerRadius: DesignRadius.card).fill(Color.brandSoft))
+  }
+
+  private var outputBodyOpacity: Double {
+    if model.isTranslating { return 0.55 }
+    if model.outputIsPlaceholder { return 0.45 }
+    return 1
+  }
+
+  @ViewBuilder private var outputActionGlyph: some View {
+    if model.isTranslating {
+      ProgressView().tint(.white)
+    } else {
+      Image(systemName: "speaker.wave.2.fill")
+        .font(.system(size: 20, weight: .semibold))
+        .foregroundStyle(.white)
+    }
   }
 
   private var downloadPrompt: some View {
     VStack(alignment: .leading, spacing: 16) {
       Text(model.downloadPromptText)
-        .font(.title3).fontWeight(.semibold)
-        .foregroundStyle(deepBlue)
+        .font(.funnel(20, weight: .bold))
+        .foregroundStyle(Color.brandDeep)
       Button {
         model.downloadButtonTapped()
       } label: {
         Text(model.downloadButtonTitle)
-          .font(.headline)
+          .font(.inter(15, weight: .semibold))
           .foregroundStyle(.white)
-          .padding(.horizontal, 28)
-          .padding(.vertical, 14)
-          .background(Capsule().fill(pageBlue))
+          .padding(.horizontal, 20)
+          .padding(.vertical, 12)
+          .background(Capsule().fill(Color.brandDeep))
       }
       .disabled(model.isPreparingDownload)
     }
   }
 
-  private var swapButton: some View {
-    Button(action: model.swapButtonTapped) {
-      Image(systemName: "arrow.up.arrow.down")
-        .font(.headline)
-        .foregroundStyle(.white)
-        .frame(width: 48, height: 48)
-        .background(Circle().fill(deepBlue))
+  private var swapRow: some View {
+    HStack {
+      Spacer()
+      Button(action: model.swapButtonTapped) {
+        Image(systemName: "arrow.up.arrow.down")
+          .font(.system(size: 20, weight: .semibold))
+          .foregroundStyle(.white)
+          .frame(width: 48, height: 48)
+          .background(Circle().fill(Color.brandDeep))
+      }
+      Spacer()
     }
   }
 
@@ -501,13 +603,13 @@ struct TranslatePage: View {
       Task { await model.saveButtonTapped() }
     } label: {
       Text(model.saveButtonTitle)
-        .font(.headline)
+        .font(.inter(17, weight: .semibold))
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity)
-        .frame(height: 56)
-        .background(Capsule().fill(deepBlue))
+        .frame(height: 54)
+        .background(Capsule().fill(Color.brandDeep))
     }
     .disabled(!model.isSaveEnabled)
-    .opacity(model.isSaveEnabled ? 1 : 0.4)
+    .opacity(model.isSaveEnabled ? 1 : 0.42)
   }
 }

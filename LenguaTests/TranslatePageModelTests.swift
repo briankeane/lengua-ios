@@ -554,6 +554,143 @@ extension TranslatePageModelTests {
 }
 
 extension TranslatePageModelTests {
+  @Test func headerReflectsDirection() {
+    let model = TranslatePageModel()
+    expectNoDifference(model.pageTitle, "Look up")
+    expectNoDifference(model.directionSubtitle, "English → Spanish")
+    expectNoDifference(model.clearButtonTitle, "Clear")
+
+    model.direction = .spanishToEnglish
+    expectNoDifference(model.directionSubtitle, "Spanish → English")
+  }
+
+  @Test func clearIsHiddenUntilThereIsContent() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "Hola" }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    #expect(model.isClearVisible == false)
+
+    model.inputText = "Hello"
+    #expect(model.isClearVisible == true)
+  }
+
+  @Test func clearResetsInputAndOutput() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "Hola" }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "Hello"
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+    expectNoDifference(model.outputText, "Hola")
+
+    model.clearButtonTapped()
+    expectNoDifference(model.inputText, "")
+    expectNoDifference(model.outputText, "")
+    #expect(model.isClearVisible == false)
+    #expect(model.isTranslating == false)
+  }
+
+  @Test func clearWhileTranslatingResetsTranslatingState() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "Hola" }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.inputText = "Hello"  // isTranslating flips true synchronously
+    #expect(model.isTranslating == true)
+
+    model.clearButtonTapped()  // clear mid-flight, before the debounce elapses
+    expectNoDifference(model.inputText, "")
+    expectNoDifference(model.outputText, "")
+    #expect(model.isTranslating == false)
+    #expect(model.saveButtonTitle == "Save to Library")
+  }
+
+  @Test func inputHintIdleAndListeningTimer() async {
+    let clock = TestClock()
+    let (streaming, streamingContinuation) = AsyncStream<Void>.makeStream()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.speechRecognizer.requestAuthorization = { .authorized }
+      $0.speechRecognizer.stop = {}
+      $0.speechSynthesizer.stop = {}
+      $0.speechRecognizer.start = { _ in
+        AsyncThrowingStream { continuation in
+          streamingContinuation.yield()
+          streamingContinuation.finish()
+          continuation.onTermination = { _ in continuation.finish() }
+        }
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    expectNoDifference(model.inputHint, "Tap the mic to speak")
+
+    model.micButtonTapped()
+    var iterator = streaming.makeAsyncIterator()
+    await iterator.next()  // dictation is live
+    expectNoDifference(model.inputHint, "Listening · 0:00")
+
+    await clock.advance(by: .seconds(7))
+    expectNoDifference(model.recordingElapsed, 7)
+    expectNoDifference(model.inputHint, "Listening · 0:07")
+
+    await clock.advance(by: .seconds(63))
+    expectNoDifference(model.inputHint, "Listening · 1:10")
+
+    model.micButtonTapped()  // stop
+    await model.recognitionTask?.value
+    expectNoDifference(model.inputHint, "Tap the mic to speak")
+  }
+
+  @Test func outputStatusLabelTracksState() async {
+    let clock = TestClock()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { _, _ in "Hola" }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    expectNoDifference(model.outputStatusLabel, "SPANISH")
+    expectNoDifference(model.outputBodyText, model.outputPlaceholder)
+    expectNoDifference(model.outputHint, "Listen")
+    expectNoDifference(model.saveButtonTitle, "Save to Library")
+
+    model.inputText = "Hello"  // isTranslating flips true synchronously
+    expectNoDifference(model.outputStatusLabel, "SPANISH · TRANSLATING…")
+    expectNoDifference(model.outputBodyText, "Translating your phrase…")
+    expectNoDifference(model.outputHint, "Working on device")
+    expectNoDifference(model.saveButtonTitle, "Translating…")
+
+    await clock.advance(by: .milliseconds(500))
+    await model.translationTask?.value
+    expectNoDifference(model.outputStatusLabel, "SPANISH · READY")
+    expectNoDifference(model.outputBodyText, "Hola")
+    expectNoDifference(model.outputHint, "Listen")
+    expectNoDifference(model.saveButtonTitle, "Save to Library")
+  }
+
+  @Test func outputStatusLabelFollowsDirection() {
+    let model = TranslatePageModel()
+    model.direction = .spanishToEnglish
+    expectNoDifference(model.outputStatusLabel, "ENGLISH")
+  }
+
   @Test func speakerErrorSurfacesAlert() async {
     let clock = TestClock()
     let model = withDependencies {
@@ -602,6 +739,7 @@ extension TranslatePageModelTests {
 
   @Test func micPermissionDeniedSurfacesAlert() async {
     let model = withDependencies {
+      $0.continuousClock = TestClock()
       $0.speechRecognizer.requestAuthorization = { .denied }
     } operation: {
       TranslatePageModel()
@@ -615,6 +753,7 @@ extension TranslatePageModelTests {
 
   @Test func micFailureSurfacesAlert() async {
     let model = withDependencies {
+      $0.continuousClock = TestClock()
       $0.speechRecognizer.requestAuthorization = { .authorized }
       $0.speechRecognizer.stop = {}
       $0.speechSynthesizer.stop = {}
@@ -635,6 +774,7 @@ extension TranslatePageModelTests {
     let stopped = LockIsolated(false)
     let (streaming, streamingContinuation) = AsyncStream<Void>.makeStream()
     let model = withDependencies {
+      $0.continuousClock = TestClock()
       $0.speechRecognizer.requestAuthorization = { .authorized }
       $0.speechRecognizer.stop = { stopped.setValue(true) }
       $0.speechSynthesizer.stop = {}
@@ -667,6 +807,7 @@ extension TranslatePageModelTests {
     let started = LockIsolated(false)
     let (gate, gateContinuation) = AsyncStream<Void>.makeStream()
     let model = withDependencies {
+      $0.continuousClock = TestClock()
       $0.speechRecognizer.requestAuthorization = {
         var iterator = gate.makeAsyncIterator()
         await iterator.next()  // suspend until the test releases the gate
@@ -697,6 +838,7 @@ extension TranslatePageModelTests {
     let spoke = LockIsolated(false)
     let (streaming, streamingContinuation) = AsyncStream<Void>.makeStream()
     let model = withDependencies {
+      $0.continuousClock = TestClock()
       $0.speechRecognizer.requestAuthorization = { .authorized }
       $0.speechRecognizer.stop = { recognizerStopped.setValue(true) }
       $0.speechSynthesizer.stop = {}
