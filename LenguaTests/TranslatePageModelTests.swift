@@ -639,6 +639,7 @@ extension TranslatePageModelTests {
     }
 
     expectNoDifference(model.inputHint, "Tap the mic to speak")
+    expectNoDifference(model.compactInputHint, "Type or speak")
 
     model.micButtonTapped()
     var iterator = streaming.makeAsyncIterator()
@@ -648,6 +649,7 @@ extension TranslatePageModelTests {
     await clock.advance(by: .seconds(7))
     expectNoDifference(model.recordingElapsed, 7)
     expectNoDifference(model.inputHint, "Listening · 0:07")
+    expectNoDifference(model.compactInputHint, "Listening · 0:07")
 
     await clock.advance(by: .seconds(63))
     expectNoDifference(model.inputHint, "Listening · 1:10")
@@ -655,6 +657,7 @@ extension TranslatePageModelTests {
     model.micButtonTapped()  // stop
     await model.recognitionTask?.value
     expectNoDifference(model.inputHint, "Tap the mic to speak")
+    expectNoDifference(model.compactInputHint, "Type or speak")
   }
 
   @Test func outputStatusLabelTracksState() async {

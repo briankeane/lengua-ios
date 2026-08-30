@@ -387,6 +387,9 @@ extension TranslatePageModel {
   var inputHint: String {
     isRecording ? "Listening · \(formattedRecordingTime)" : "Tap the mic to speak"
   }
+  var compactInputHint: String {
+    isRecording ? "Listening · \(formattedRecordingTime)" : "Type or speak"
+  }
 
   var outputPlaceholder: String { direction.outputLabel }
   var outputIsPlaceholder: Bool { outputText.isEmpty }
@@ -430,24 +433,79 @@ extension TranslatePageModel {
   var downloadButtonTitle: String { "Download" }
 }
 
+/// The two visual states of the Look Up screen. `expanded` is the default
+/// (keyboard down); `compact` shrinks everything to sit above the iOS keyboard
+/// while the input is focused. Same view skeleton in both — only these metrics
+/// and a few chrome choices differ.
+private struct TranslateLayoutMetrics {
+  var titleFont: Font
+  var subtitleFont: Font
+  var cardOuterRadius: CGFloat
+  var cardBodyFont: Font
+  var cardPadding: CGFloat
+  var cardSpacing: CGFloat
+  var cardMinHeight: CGFloat
+  var hintFontSize: CGFloat
+  var actionSize: CGFloat
+  var iconSize: CGFloat
+  var seamOverlap: CGFloat
+  var saveHeight: CGFloat
+  var saveFont: Font
+  var contentSpacing: CGFloat
+  var contentPadding: EdgeInsets
+
+  static let expanded = TranslateLayoutMetrics(
+    titleFont: .funnel(32, weight: .bold),
+    subtitleFont: .inter(13),
+    cardOuterRadius: 20,
+    cardBodyFont: .funnel(30, weight: .bold),
+    cardPadding: 20,
+    cardSpacing: 12,
+    cardMinHeight: 240,
+    hintFontSize: 14,
+    actionSize: 48,
+    iconSize: 20,
+    seamOverlap: 4,
+    saveHeight: 54,
+    saveFont: .inter(17, weight: .semibold),
+    contentSpacing: 14,
+    contentPadding: EdgeInsets(top: 14, leading: 16, bottom: 16, trailing: 16))
+
+  static let compact = TranslateLayoutMetrics(
+    titleFont: .funnel(24, weight: .bold),
+    subtitleFont: .inter(12),
+    cardOuterRadius: 16,
+    cardBodyFont: .funnel(24, weight: .bold),
+    cardPadding: 14,
+    cardSpacing: 6,
+    cardMinHeight: 150,
+    hintFontSize: 12,
+    actionSize: 44,
+    iconSize: 18,
+    seamOverlap: 4,
+    saveHeight: 46,
+    saveFont: .inter(15, weight: .bold),
+    contentSpacing: 10,
+    contentPadding: EdgeInsets(top: 8, leading: 12, bottom: 10, trailing: 12))
+}
+
 struct TranslatePage: View {
   @State var model: TranslatePageModel
   @FocusState private var isInputFocused: Bool
 
+  private var metrics: TranslateLayoutMetrics {
+    isInputFocused ? .compact : .expanded
+  }
+
   var body: some View {
     GeometryReader { proxy in
       ScrollView {
-        VStack(alignment: .leading, spacing: 14) {
-          header
-          inputCard
-          swapRow
-          outputCard
-          saveButton
-        }
-        .padding(.top, 14)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 16)
-        .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+        content
+          .padding(metrics.contentPadding)
+          .frame(
+            maxWidth: .infinity,
+            minHeight: isInputFocused ? 0 : proxy.size.height,
+            alignment: .top)
       }
     }
     .scrollDismissesKeyboard(.interactively)
@@ -463,109 +521,213 @@ struct TranslatePage: View {
     .onDisappear { model.pageDisappeared() }
   }
 
+  private var content: some View {
+    VStack(alignment: .leading, spacing: metrics.contentSpacing) {
+      header
+      cardStack
+      saveButton
+    }
+  }
+
   private var header: some View {
     HStack(alignment: .top) {
       VStack(alignment: .leading, spacing: 2) {
         Text(model.pageTitle)
-          .font(.funnel(32, weight: .bold))
+          .font(metrics.titleFont)
           .foregroundStyle(.white)
         Text(model.directionSubtitle)
-          .font(.inter(13))
-          .foregroundStyle(.white.opacity(0.73))
+          .font(metrics.subtitleFont)
+          .foregroundStyle(.white.opacity(0.75))
       }
       Spacer()
-      if model.isClearVisible {
-        Button {
-          model.clearButtonTapped()
-        } label: {
-          Text(model.clearButtonTitle)
-            .font(.inter(12, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.vertical, 7)
-            .padding(.horizontal, 10)
-            .background(Capsule().fill(Color.white.opacity(0.133)))
-        }
+      headerTrailingAction
+    }
+  }
+
+  @ViewBuilder private var headerTrailingAction: some View {
+    if isInputFocused {
+      Button {
+        isInputFocused = false
+      } label: {
+        Text(model.doneButtonTitle)
+          .font(.inter(13, weight: .bold))
+          .foregroundStyle(.white)
+          .padding(.vertical, 8)
+          .padding(.horizontal, 16)
+          .background(Capsule().fill(Color.white.opacity(0.125)))
       }
+    } else if model.isClearVisible {
+      Button {
+        model.clearButtonTapped()
+      } label: {
+        Text(model.clearButtonTitle)
+          .font(.inter(12, weight: .semibold))
+          .foregroundStyle(.white)
+          .padding(.vertical, 7)
+          .padding(.horizontal, 10)
+          .background(Capsule().fill(Color.white.opacity(0.133)))
+      }
+    }
+  }
+
+  /// Input and output cards butted together at a seam, with the swap control
+  /// floating centered over that seam.
+  private var cardStack: some View {
+    VStack(spacing: -metrics.seamOverlap) {
+      inputCard
+        .overlay(alignment: .bottom) {
+          swapButton.offset(y: metrics.actionSize / 2)
+        }
+        .zIndex(1)
+      outputCard
     }
   }
 
   private var inputCard: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text(model.inputLabel)
-        .font(.inter(12, weight: .bold))
-        .textCase(.uppercase)
-        .foregroundStyle(Color.muted)
-      TextField(model.inputPlaceholder, text: $model.inputText, axis: .vertical)
-        .font(.funnel(27, weight: .bold))
-        .foregroundStyle(Color.ink)
-        .focused($isInputFocused)
-      Spacer(minLength: 12)
-      HStack(alignment: .bottom) {
-        Text(model.inputHint)
-          .font(.inter(14, weight: model.isRecording ? .bold : .regular))
-          .foregroundStyle(model.isRecording ? Color.danger : Color.muted)
+    VStack(alignment: .leading, spacing: metrics.cardSpacing) {
+      HStack {
+        Text(model.inputLabel)
+          .font(.inter(12, weight: .bold))
+          .textCase(.uppercase)
+          .foregroundStyle(Color.muted)
         Spacer()
-        Button(action: model.micButtonTapped) {
-          Image(systemName: model.isRecording ? "stop.fill" : "mic.fill")
-            .font(.system(size: 20, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 48, height: 48)
-            .background(Circle().fill(model.isRecording ? Color.danger : Color.brandDeep))
+        if isInputFocused {
+          Button {
+            model.clearButtonTapped()
+          } label: {
+            Image(systemName: "xmark")
+              .font(.system(size: 16, weight: .semibold))
+              .foregroundStyle(Color.brandDeep)
+              .frame(width: metrics.actionSize, height: metrics.actionSize)
+              .background(Circle().fill(Color.brandSoft))
+          }
         }
       }
+      TextField(model.inputPlaceholder, text: $model.inputText, axis: .vertical)
+        .font(metrics.cardBodyFont)
+        .foregroundStyle(Color.ink)
+        .focused($isInputFocused)
+      Spacer(minLength: metrics.cardSpacing)
+      HStack(alignment: .bottom) {
+        Text(isInputFocused ? model.compactInputHint : model.inputHint)
+          .font(.inter(metrics.hintFontSize, weight: model.isRecording ? .bold : .regular))
+          .foregroundStyle(model.isRecording ? Color.danger : Color.muted)
+        Spacer()
+        micButton
+      }
     }
-    .padding(20)
-    .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
-    .background(RoundedRectangle(cornerRadius: DesignRadius.card).fill(Color.surface))
+    .padding(metrics.cardPadding)
+    .frame(maxWidth: .infinity, minHeight: metrics.cardMinHeight, alignment: .topLeading)
+    .background(cardShape(topRadius: metrics.cardOuterRadius, bottomRadius: 4).fill(Color.surface))
   }
 
   private var outputCard: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text(model.outputStatusLabel)
-        .font(.inter(12, weight: .bold))
-        .foregroundStyle(Color.brandDeep)
+    VStack(alignment: .leading, spacing: metrics.cardSpacing) {
+      HStack {
+        Text(model.outputStatusLabel)
+          .font(.inter(12, weight: .bold))
+          .foregroundStyle(Color.brandDeep)
+        Spacer()
+        if isInputFocused { speakerButton }
+      }
       if model.showsDownloadPrompt {
         downloadPrompt
       } else {
         Text(model.outputBodyText)
-          .font(.funnel(model.isTranslating ? 24 : 27, weight: .bold))
+          .font(metrics.cardBodyFont)
           .foregroundStyle(Color.brandDeep.opacity(outputBodyOpacity))
       }
-      Spacer(minLength: 12)
-      HStack(alignment: .bottom) {
-        Text(model.outputHint)
-          .font(.inter(14))
-          .foregroundStyle(Color.brandDeep)
-        Spacer()
-        Button {
-          Task { await model.speakerButtonTapped() }
-        } label: {
-          outputActionGlyph
-            .frame(width: 48, height: 48)
-            .background(Circle().fill(Color.brandDeep))
+      if !isInputFocused {
+        Spacer(minLength: metrics.cardSpacing)
+        HStack(alignment: .bottom) {
+          Text(model.outputHint)
+            .font(.inter(14))
+            .foregroundStyle(Color.brandDeep)
+          Spacer()
+          speakerButton
         }
-        .disabled(model.isTranslating)
       }
     }
-    .padding(20)
-    .frame(maxWidth: .infinity, minHeight: 196, alignment: .topLeading)
-    .background(RoundedRectangle(cornerRadius: DesignRadius.card).fill(Color.brandSoft))
+    .padding(metrics.cardPadding)
+    .frame(maxWidth: .infinity, minHeight: metrics.cardMinHeight, alignment: .topLeading)
+    .background(
+      cardShape(topRadius: 4, bottomRadius: metrics.cardOuterRadius).fill(Color.brandSoft))
+  }
+
+  private var micButton: some View {
+    Button(action: model.micButtonTapped) {
+      Image(systemName: model.isRecording ? "stop.fill" : "mic.fill")
+        .font(.system(size: metrics.iconSize, weight: .semibold))
+        .foregroundStyle(.white)
+        .frame(width: metrics.actionSize, height: metrics.actionSize)
+        .background(Circle().fill(micColor))
+    }
+  }
+
+  private var micColor: Color {
+    if model.isRecording { return .danger }
+    return isInputFocused ? .brand : .brandDeep
+  }
+
+  /// Filled circle in expanded state, ghost/outline in compact state.
+  private var speakerButton: some View {
+    Button {
+      Task { await model.speakerButtonTapped() }
+    } label: {
+      speakerGlyph
+        .frame(width: metrics.actionSize, height: metrics.actionSize)
+        .background(speakerBackground)
+    }
+    .disabled(model.isTranslating)
+  }
+
+  @ViewBuilder private var speakerGlyph: some View {
+    if model.isTranslating {
+      ProgressView().tint(isInputFocused ? Color.brandDeep : .white)
+    } else {
+      Image(systemName: "speaker.wave.2.fill")
+        .font(.system(size: metrics.iconSize, weight: .semibold))
+        .foregroundStyle(isInputFocused ? Color.brandDeep : .white)
+    }
+  }
+
+  @ViewBuilder private var speakerBackground: some View {
+    if isInputFocused {
+      Circle().stroke(Color.brandDeep, lineWidth: 1.5)
+    } else {
+      Circle().fill(Color.brandDeep)
+    }
+  }
+
+  private var swapButton: some View {
+    Button(action: model.swapButtonTapped) {
+      Image(systemName: "arrow.up.arrow.down")
+        .font(.system(size: metrics.iconSize, weight: .semibold))
+        .foregroundStyle(.white)
+        .frame(width: metrics.actionSize, height: metrics.actionSize)
+        .background(Circle().fill(Color.brandDeep))
+    }
+  }
+
+  private var saveButton: some View {
+    Button {
+      Task { await model.saveButtonTapped() }
+    } label: {
+      Text(model.saveButtonTitle)
+        .font(metrics.saveFont)
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .frame(height: metrics.saveHeight)
+        .background(Capsule().fill(Color.brandDeep))
+    }
+    .disabled(!model.isSaveEnabled)
+    .opacity(model.isSaveEnabled ? 1 : 0.42)
   }
 
   private var outputBodyOpacity: Double {
     if model.isTranslating { return 0.55 }
     if model.outputIsPlaceholder { return 0.45 }
     return 1
-  }
-
-  @ViewBuilder private var outputActionGlyph: some View {
-    if model.isTranslating {
-      ProgressView().tint(.white)
-    } else {
-      Image(systemName: "speaker.wave.2.fill")
-        .font(.system(size: 20, weight: .semibold))
-        .foregroundStyle(.white)
-    }
   }
 
   private var downloadPrompt: some View {
@@ -587,32 +749,11 @@ struct TranslatePage: View {
     }
   }
 
-  private var swapRow: some View {
-    HStack {
-      Spacer()
-      Button(action: model.swapButtonTapped) {
-        Image(systemName: "arrow.up.arrow.down")
-          .font(.system(size: 20, weight: .semibold))
-          .foregroundStyle(.white)
-          .frame(width: 48, height: 48)
-          .background(Circle().fill(Color.brandDeep))
-      }
-      Spacer()
-    }
-  }
-
-  private var saveButton: some View {
-    Button {
-      Task { await model.saveButtonTapped() }
-    } label: {
-      Text(model.saveButtonTitle)
-        .font(.inter(17, weight: .semibold))
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity)
-        .frame(height: 54)
-        .background(Capsule().fill(Color.brandDeep))
-    }
-    .disabled(!model.isSaveEnabled)
-    .opacity(model.isSaveEnabled ? 1 : 0.42)
+  private func cardShape(topRadius: CGFloat, bottomRadius: CGFloat) -> UnevenRoundedRectangle {
+    UnevenRoundedRectangle(
+      topLeadingRadius: topRadius,
+      bottomLeadingRadius: bottomRadius,
+      bottomTrailingRadius: bottomRadius,
+      topTrailingRadius: topRadius)
   }
 }

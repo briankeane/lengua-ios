@@ -64,7 +64,7 @@
               "fill": "$muted",
               "textGrowth": "fixed-width",
               "width": 360,
-              "content": "Clear hierarchy · One primary action · 44pt+ targets\nDynamic Type grows cards · Never truncate\nExplicit states · Accessible contrast",
+              "content": "Clear hierarchy · One primary action · 44pt+ targets\nDynamic Type grows cards · Never truncate\nKeyboard: same paired workspace compresses; tabs hide\nExplicit states · Accessible contrast",
               "lineHeight": 1.5,
               "textAlign": "right",
               "fontFamily": "$font-body",
@@ -1405,7 +1405,7 @@
           "width": "fill_container",
           "height": "fill_container",
           "layout": "vertical",
-          "gap": 14,
+          "gap": 12,
           "padding": [
             14,
             16,
@@ -1476,43 +1476,98 @@
               ]
             },
             {
-              "id": "PVgYW",
-              "type": "ref",
-              "ref": "NjfHV",
-              "name": "English Input Card",
-              "width": "fill_container",
-              "height": 220,
-              "descendants": {
-                "FPNvQ": {
-                  "content": "ENGLISH"
-                },
-                "nHSyg": {
-                  "content": "Where is the nearest station?",
-                  "fontSize": 27
-                },
-                "sKQfI": {
-                  "content": "Listening · 0:07",
-                  "fill": "$danger",
-                  "fontWeight": "700",
-                  "fontSize": 14
-                },
-                "LkQ6A": {
-                  "fill": "$danger"
-                },
-                "LkQ6A/D5xrXQ": {
-                  "icon": "square"
-                }
-              }
-            },
-            {
               "type": "frame",
-              "id": "F2UvD",
-              "name": "Swap Control Row",
+              "id": "Et7eO",
+              "name": "Expanded Translation Pair",
               "width": "fill_container",
-              "height": 48,
-              "justifyContent": "center",
-              "alignItems": "center",
+              "height": 574,
+              "layout": "none",
               "children": [
+                {
+                  "id": "PVgYW",
+                  "type": "ref",
+                  "ref": "NjfHV",
+                  "name": "English Input Card",
+                  "width": 361,
+                  "height": 289,
+                  "x": 0,
+                  "y": 0,
+                  "cornerRadius": [
+                    20,
+                    20,
+                    4,
+                    4
+                  ],
+                  "layoutPosition": "absolute",
+                  "opacity": 1,
+                  "fill": "$surface",
+                  "descendants": {
+                    "FPNvQ": {
+                      "content": "ENGLISH",
+                      "fill": "$muted"
+                    },
+                    "nHSyg": {
+                      "content": "Where is the nearest station?",
+                      "fontSize": 30,
+                      "fill": "$ink"
+                    },
+                    "sKQfI": {
+                      "content": "Tap the mic to speak",
+                      "fill": "$muted",
+                      "fontWeight": "normal",
+                      "fontSize": 14
+                    },
+                    "LkQ6A": {
+                      "fill": "$brand-deep"
+                    },
+                    "LkQ6A/D5xrXQ": {
+                      "icon": "mic",
+                      "fill": "#FFFFFF"
+                    }
+                  }
+                },
+                {
+                  "id": "LrkSk",
+                  "type": "ref",
+                  "ref": "NjfHV",
+                  "name": "Spanish Output Card",
+                  "width": 361,
+                  "height": 289,
+                  "fill": "$brand-soft",
+                  "x": 0,
+                  "y": 285,
+                  "cornerRadius": [
+                    4,
+                    4,
+                    20,
+                    20
+                  ],
+                  "layoutPosition": "absolute",
+                  "opacity": 1,
+                  "descendants": {
+                    "FPNvQ": {
+                      "content": "SPANISH · READY",
+                      "fill": "$brand-deep"
+                    },
+                    "nHSyg": {
+                      "content": "¿Dónde está la estación más cercana?",
+                      "fontSize": 30,
+                      "fill": "$brand-deep"
+                    },
+                    "sKQfI": {
+                      "content": "Listen",
+                      "fill": "$brand-deep",
+                      "fontSize": 14
+                    },
+                    "LkQ6A": {
+                      "fill": "$brand-deep"
+                    },
+                    "LkQ6A/D5xrXQ": {
+                      "icon": "volume-2",
+                      "fill": "#FFFFFF"
+                    }
+                  }
+                },
                 {
                   "id": "XvvKp",
                   "type": "ref",
@@ -1520,6 +1575,21 @@
                   "name": "Swap Languages Button",
                   "width": 48,
                   "height": 48,
+                  "x": 156.5,
+                  "y": 261,
+                  "layoutPosition": "absolute",
+                  "effect": {
+                    "type": "shadow",
+                    "shadowType": "outer",
+                    "color": "#18213D40",
+                    "offset": {
+                      "x": 0,
+                      "y": 2
+                    },
+                    "blur": 7
+                  },
+                  "opacity": 1,
+                  "fill": "$brand-deep",
                   "descendants": {
                     "D5xrXQ": {
                       "icon": "arrow-up-down"
@@ -1527,34 +1597,6 @@
                   }
                 }
               ]
-            },
-            {
-              "id": "LrkSk",
-              "type": "ref",
-              "ref": "NjfHV",
-              "name": "Spanish Output Card",
-              "width": "fill_container",
-              "height": 196,
-              "fill": "$brand-soft",
-              "descendants": {
-                "FPNvQ": {
-                  "content": "SPANISH · READY",
-                  "fill": "$brand-deep"
-                },
-                "nHSyg": {
-                  "content": "¿Dónde está la estación más cercana?",
-                  "fontSize": 27,
-                  "fill": "$brand-deep"
-                },
-                "sKQfI": {
-                  "content": "Listen",
-                  "fill": "$brand-deep",
-                  "fontSize": 14
-                },
-                "LkQ6A/D5xrXQ": {
-                  "icon": "volume-2"
-                }
-              }
             },
             {
               "id": "Rkm1L",
@@ -4908,6 +4950,1593 @@
               "fill": "$muted"
             }
           }
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "FZGS5",
+      "x": 2598,
+      "y": 0,
+      "name": "Screen · Look Up · Keyboard Compact",
+      "clip": true,
+      "width": 393,
+      "height": 852,
+      "fill": "$brand",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "n2Eje",
+          "name": "Compact App Viewport",
+          "width": "fill_container",
+          "height": 526,
+          "fill": "$brand",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "n1YQC",
+              "name": "Compact Status Bar",
+              "width": "fill_container",
+              "height": 28,
+              "padding": [
+                7,
+                18,
+                0,
+                18
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "EJHwu",
+                  "name": "Compact Status Time",
+                  "fill": "#FFFFFF",
+                  "content": "9:41",
+                  "fontFamily": "$font-body",
+                  "fontSize": 12,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "frame",
+                  "id": "bSdzi",
+                  "name": "Compact Status Indicators",
+                  "gap": 5,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "chfQZ",
+                      "name": "Compact Signal Icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "signal",
+                      "library": "lucide",
+                      "fill": "#FFFFFF"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "o5lP2Z",
+                      "name": "Compact Battery Icon",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "battery-full",
+                      "library": "lucide",
+                      "fill": "#FFFFFF"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "u6rUi",
+              "name": "Compact Translation Utility",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 6,
+              "padding": [
+                8,
+                12,
+                10,
+                12
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "NvfDs",
+                  "name": "Compact Header",
+                  "width": "fill_container",
+                  "height": 46,
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Srl8P",
+                      "name": "Compact Title Group",
+                      "layout": "vertical",
+                      "gap": 1,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "CbLT8",
+                          "name": "Compact Title",
+                          "fill": "#FFFFFF",
+                          "content": "Look up",
+                          "fontFamily": "$font-display",
+                          "fontSize": 24,
+                          "fontWeight": "700"
+                        },
+                        {
+                          "type": "text",
+                          "id": "hencb",
+                          "name": "Compact Direction",
+                          "fill": "#FFFFFFCC",
+                          "content": "English → Spanish",
+                          "fontFamily": "$font-body",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "hox3Q",
+                      "name": "Keyboard Done Button",
+                      "height": 34,
+                      "fill": "#FFFFFF20",
+                      "cornerRadius": 999,
+                      "padding": [
+                        0,
+                        13
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "THjPu",
+                          "name": "Keyboard Done Label",
+                          "fill": "#FFFFFF",
+                          "content": "Done",
+                          "fontFamily": "$font-body",
+                          "fontSize": 13,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "J4z5Tu",
+                  "name": "Compact Translation Pair",
+                  "width": "fill_container",
+                  "height": 376,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "pyNlr",
+                      "layoutPosition": "absolute",
+                      "x": 0,
+                      "y": 0,
+                      "name": "Compact English Input",
+                      "width": 369,
+                      "height": 190,
+                      "fill": "$surface",
+                      "cornerRadius": [
+                        16,
+                        16,
+                        4,
+                        4
+                      ],
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": [
+                        12,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "P14IV",
+                          "name": "Compact Input Header",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "FltJ4",
+                              "name": "Compact Input Label",
+                              "fill": "$muted",
+                              "content": "ENGLISH",
+                              "fontFamily": "$font-body",
+                              "fontSize": 12,
+                              "fontWeight": "700",
+                              "letterSpacing": 1
+                            },
+                            {
+                              "type": "frame",
+                              "id": "D1JBTt",
+                              "name": "Compact Clear Button",
+                              "width": 44,
+                              "height": 44,
+                              "fill": "$brand-soft",
+                              "cornerRadius": 999,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "DbQ3N",
+                                  "name": "Compact Clear Icon",
+                                  "width": 16,
+                                  "height": 16,
+                                  "icon": "x",
+                                  "library": "lucide",
+                                  "fill": "$brand-deep"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "F6bx4",
+                          "name": "Compact Input Text",
+                          "fill": "$ink",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Where is the nearest station?",
+                          "lineHeight": 1.08,
+                          "fontFamily": "$font-display",
+                          "fontSize": 24,
+                          "fontWeight": "700"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "A8EkwE",
+                          "name": "Compact Input Footer",
+                          "width": "fill_container",
+                          "height": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "end",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ycp8m",
+                              "name": "Compact Input Hint",
+                              "fill": "$muted",
+                              "content": "Type or speak",
+                              "fontFamily": "$font-body",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "xvUJX",
+                              "name": "Compact Mic Button",
+                              "width": 44,
+                              "height": 44,
+                              "fill": "$brand",
+                              "cornerRadius": 999,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "QWMWi",
+                                  "name": "Compact Mic Icon",
+                                  "width": 18,
+                                  "height": 18,
+                                  "icon": "mic",
+                                  "library": "lucide",
+                                  "fill": "#FFFFFF"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "grnsq",
+                      "layoutPosition": "absolute",
+                      "x": 0,
+                      "y": 186,
+                      "name": "Compact Spanish Output",
+                      "width": 369,
+                      "height": 190,
+                      "fill": "$brand-soft",
+                      "cornerRadius": [
+                        4,
+                        4,
+                        16,
+                        16
+                      ],
+                      "layout": "vertical",
+                      "gap": 5,
+                      "padding": [
+                        11,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "dm11v",
+                          "name": "Compact Output Header",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "j9JZC",
+                              "name": "Compact Output Label",
+                              "fill": "$brand-deep",
+                              "content": "SPANISH · READY",
+                              "fontFamily": "$font-body",
+                              "fontSize": 12,
+                              "fontWeight": "700",
+                              "letterSpacing": 1
+                            },
+                            {
+                              "type": "frame",
+                              "id": "jSp8n",
+                              "name": "Compact Speaker Button",
+                              "width": 44,
+                              "height": 44,
+                              "cornerRadius": 999,
+                              "stroke": "$brand-deep",
+                              "strokeWidth": 1,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "QLrmA",
+                                  "name": "Compact Speaker Icon",
+                                  "width": 17,
+                                  "height": 17,
+                                  "icon": "volume-2",
+                                  "library": "lucide",
+                                  "fill": "$brand-deep"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "gRmOx",
+                          "name": "Compact Output Text",
+                          "fill": "$brand-deep",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "¿Dónde está la estación más cercana?",
+                          "lineHeight": 1.08,
+                          "fontFamily": "$font-display",
+                          "fontSize": 24,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ZNjS3",
+                      "layoutPosition": "absolute",
+                      "x": 162.5,
+                      "y": 164,
+                      "name": "Compact Swap Button",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "$brand-deep",
+                      "cornerRadius": 999,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#18213D40",
+                        "offset": {
+                          "x": 0,
+                          "y": 2
+                        },
+                        "blur": 6
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "iOgDm",
+                          "name": "Compact Swap Icon",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "arrow-up-down",
+                          "library": "lucide",
+                          "fill": "#FFFFFF"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "nEz0J",
+                  "name": "Compact Save Button",
+                  "width": "fill_container",
+                  "height": 46,
+                  "fill": "$brand-deep",
+                  "cornerRadius": 999,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "gDJV0",
+                      "name": "Compact Save Label",
+                      "fill": "#FFFFFF",
+                      "content": "Save to Library",
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "700"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "BC4fm",
+          "name": "iOS Keyboard",
+          "width": "fill_container",
+          "height": 326,
+          "fill": "#AEB1B5",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Yyj4G",
+              "name": "Keyboard Suggestions",
+              "width": "fill_container",
+              "height": 44,
+              "fill": "#BEC1C5",
+              "stroke": "#92959A",
+              "strokeWidth": {
+                "bottom": 1
+              },
+              "justifyContent": "space_around",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "l9AbBd",
+                  "name": "Suggestion 1",
+                  "fill": "$ink",
+                  "content": "“station”",
+                  "fontFamily": "$font-body",
+                  "fontSize": 15,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "k8Wt9",
+                  "name": "Suggestion 2",
+                  "fill": "$ink",
+                  "content": "stations",
+                  "fontFamily": "$font-body",
+                  "fontSize": 15,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "aj5CC",
+                  "name": "Suggestion 3",
+                  "fill": "$ink",
+                  "content": "stationary",
+                  "fontFamily": "$font-body",
+                  "fontSize": 15,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "NGI33",
+              "name": "Keyboard Keys",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 7,
+              "padding": [
+                8,
+                8,
+                10,
+                8
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "bibjh",
+                  "name": "Keyboard Row 1",
+                  "width": "fill_container",
+                  "height": 48,
+                  "gap": 5,
+                  "justifyContent": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "jTw8i",
+                      "name": "Key Q",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "U3rTI",
+                          "name": "Key Label Q",
+                          "fill": "$ink",
+                          "content": "Q",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "N7olg",
+                      "name": "Key W",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ISqkC",
+                          "name": "Key Label W",
+                          "fill": "$ink",
+                          "content": "W",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wGudh",
+                      "name": "Key E",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "FciJI",
+                          "name": "Key Label E",
+                          "fill": "$ink",
+                          "content": "E",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "EcYik",
+                      "name": "Key R",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ufIav",
+                          "name": "Key Label R",
+                          "fill": "$ink",
+                          "content": "R",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "c2Mrr",
+                      "name": "Key T",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "FVfPP",
+                          "name": "Key Label T",
+                          "fill": "$ink",
+                          "content": "T",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "m078H5",
+                      "name": "Key Y",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "n5Qgw",
+                          "name": "Key Label Y",
+                          "fill": "$ink",
+                          "content": "Y",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Fiqju",
+                      "name": "Key U",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "F2FU52",
+                          "name": "Key Label U",
+                          "fill": "$ink",
+                          "content": "U",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "KxtAr",
+                      "name": "Key I",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "YXzOi",
+                          "name": "Key Label I",
+                          "fill": "$ink",
+                          "content": "I",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "a2Pvv5",
+                      "name": "Key O",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "qtDrP",
+                          "name": "Key Label O",
+                          "fill": "$ink",
+                          "content": "O",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uur15",
+                      "name": "Key P",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "SbRjn",
+                          "name": "Key Label P",
+                          "fill": "$ink",
+                          "content": "P",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "X4Id3",
+                  "name": "Keyboard Row 2",
+                  "width": "fill_container",
+                  "height": 48,
+                  "gap": 5,
+                  "justifyContent": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "WUCuE",
+                      "name": "Key A",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "kFdzV",
+                          "name": "Key Label A",
+                          "fill": "$ink",
+                          "content": "A",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "gidA1",
+                      "name": "Key S",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lw8tF",
+                          "name": "Key Label S",
+                          "fill": "$ink",
+                          "content": "S",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "lZo5z",
+                      "name": "Key D",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "hDgBu",
+                          "name": "Key Label D",
+                          "fill": "$ink",
+                          "content": "D",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "jorY9",
+                      "name": "Key F",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "d2dkSe",
+                          "name": "Key Label F",
+                          "fill": "$ink",
+                          "content": "F",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "n6gp5",
+                      "name": "Key G",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ug0u2",
+                          "name": "Key Label G",
+                          "fill": "$ink",
+                          "content": "G",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "YA7Iy",
+                      "name": "Key H",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "PhO7N",
+                          "name": "Key Label H",
+                          "fill": "$ink",
+                          "content": "H",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "T7ElH",
+                      "name": "Key J",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "xaiEg",
+                          "name": "Key Label J",
+                          "fill": "$ink",
+                          "content": "J",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Q91uEI",
+                      "name": "Key K",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "wCdAp",
+                          "name": "Key Label K",
+                          "fill": "$ink",
+                          "content": "K",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "YcQAr",
+                      "name": "Key L",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "TuFev",
+                          "name": "Key Label L",
+                          "fill": "$ink",
+                          "content": "L",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MQq84",
+                  "name": "Keyboard Row 3",
+                  "width": "fill_container",
+                  "height": 48,
+                  "gap": 5,
+                  "justifyContent": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ayzpI",
+                      "name": "Key ⇧",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#8F9398",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "E7fK1n",
+                          "name": "Key Label ⇧",
+                          "fill": "$ink",
+                          "content": "⇧",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "zSCN9",
+                      "name": "Key Z",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "EyJ61",
+                          "name": "Key Label Z",
+                          "fill": "$ink",
+                          "content": "Z",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "rqhB6",
+                      "name": "Key X",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "LGo9l",
+                          "name": "Key Label X",
+                          "fill": "$ink",
+                          "content": "X",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "PmXsL",
+                      "name": "Key C",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "L84G18",
+                          "name": "Key Label C",
+                          "fill": "$ink",
+                          "content": "C",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "mTue7",
+                      "name": "Key V",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "vGP14",
+                          "name": "Key Label V",
+                          "fill": "$ink",
+                          "content": "V",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "A8WGn",
+                      "name": "Key B",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lERUR",
+                          "name": "Key Label B",
+                          "fill": "$ink",
+                          "content": "B",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "b93AR",
+                      "name": "Key N",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "zm7ST",
+                          "name": "Key Label N",
+                          "fill": "$ink",
+                          "content": "N",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "EEU2i",
+                      "name": "Key M",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "xLQRf",
+                          "name": "Key Label M",
+                          "fill": "$ink",
+                          "content": "M",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "pb0nV",
+                      "name": "Key ⌫",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#8F9398",
+                      "cornerRadius": 6,
+                      "effect": {
+                        "type": "shadow",
+                        "shadowType": "outer",
+                        "color": "#00000024",
+                        "offset": {
+                          "x": 0,
+                          "y": 1
+                        },
+                        "blur": 1
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "fYY8i",
+                          "name": "Key Label ⌫",
+                          "fill": "$ink",
+                          "content": "⌫",
+                          "fontFamily": "$font-body",
+                          "fontSize": 17,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Pgoox",
+                  "name": "Keyboard Action Row",
+                  "width": "fill_container",
+                  "height": 48,
+                  "gap": 7,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "JdRQh",
+                      "name": "Keyboard Numbers Key",
+                      "width": 70,
+                      "height": "fill_container",
+                      "fill": "#8F9398",
+                      "cornerRadius": 7,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Pt6PW",
+                          "name": "Keyboard Numbers Label",
+                          "fill": "$ink",
+                          "content": "123",
+                          "fontFamily": "$font-body",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "cJHqT",
+                      "name": "Keyboard Space Key",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#F5F5F7",
+                      "cornerRadius": 7,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Yo3oN",
+                          "name": "Keyboard Space Label",
+                          "fill": "$muted",
+                          "content": "space",
+                          "fontFamily": "$font-body",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "s1ZUw",
+                      "name": "Keyboard Return Key",
+                      "width": 88,
+                      "height": "fill_container",
+                      "fill": "$brand",
+                      "cornerRadius": 7,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "whJBB",
+                          "name": "Keyboard Return Label",
+                          "fill": "#FFFFFF",
+                          "content": "return",
+                          "fontFamily": "$font-body",
+                          "fontSize": 14,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "QFhCO",
+                  "name": "Keyboard Bottom Controls",
+                  "width": "fill_container",
+                  "height": 44,
+                  "padding": [
+                    0,
+                    18
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "qXlrM",
+                      "name": "Keyboard Globe Icon",
+                      "width": 22,
+                      "height": 22,
+                      "icon": "globe",
+                      "library": "lucide",
+                      "fill": "$ink"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "yYDbM",
+                      "name": "Keyboard Dictation Icon",
+                      "width": 22,
+                      "height": 22,
+                      "icon": "mic",
+                      "library": "lucide",
+                      "fill": "$ink"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         }
       ]
     }
