@@ -492,9 +492,10 @@ private struct TranslateLayoutMetrics {
 struct TranslatePage: View {
   @State var model: TranslatePageModel
   @FocusState private var isInputFocused: Bool
+  @State private var isCompact = false
 
   private var metrics: TranslateLayoutMetrics {
-    isInputFocused ? .compact : .expanded
+    isCompact ? .compact : .expanded
   }
 
   var body: some View {
@@ -504,7 +505,7 @@ struct TranslatePage: View {
           .padding(metrics.contentPadding)
           .frame(
             maxWidth: .infinity,
-            minHeight: isInputFocused ? 0 : proxy.size.height,
+            minHeight: isCompact ? 0 : proxy.size.height,
             alignment: .top)
       }
     }
@@ -516,6 +517,11 @@ struct TranslatePage: View {
         Spacer()
         Button(model.doneButtonTitle) { isInputFocused = false }
       }
+    }
+    .onChange(of: isInputFocused) { _, focused in
+      // Match the iOS keyboard's show/hide timing so the layout shrinks and grows
+      // in lockstep with the keyboard sliding in and out.
+      withAnimation(.easeInOut(duration: 0.25)) { isCompact = focused }
     }
     .task { await model.pageAppeared() }
     .onDisappear { model.pageDisappeared() }
@@ -545,18 +551,7 @@ struct TranslatePage: View {
   }
 
   @ViewBuilder private var headerTrailingAction: some View {
-    if isInputFocused {
-      Button {
-        isInputFocused = false
-      } label: {
-        Text(model.doneButtonTitle)
-          .font(.inter(13, weight: .bold))
-          .foregroundStyle(.white)
-          .padding(.vertical, 8)
-          .padding(.horizontal, 16)
-          .background(Capsule().fill(Color.white.opacity(0.125)))
-      }
-    } else if model.isClearVisible {
+    if model.isClearVisible {
       Button {
         model.clearButtonTapped()
       } label: {
@@ -591,7 +586,7 @@ struct TranslatePage: View {
           .textCase(.uppercase)
           .foregroundStyle(Color.muted)
         Spacer()
-        if isInputFocused {
+        if isCompact {
           Button {
             model.clearButtonTapped()
           } label: {
@@ -609,7 +604,7 @@ struct TranslatePage: View {
         .focused($isInputFocused)
       Spacer(minLength: metrics.cardSpacing)
       HStack(alignment: .bottom) {
-        Text(isInputFocused ? model.compactInputHint : model.inputHint)
+        Text(isCompact ? model.compactInputHint : model.inputHint)
           .font(.inter(metrics.hintFontSize, weight: model.isRecording ? .bold : .regular))
           .foregroundStyle(model.isRecording ? Color.danger : Color.muted)
         Spacer()
@@ -628,7 +623,7 @@ struct TranslatePage: View {
           .font(.inter(12, weight: .bold))
           .foregroundStyle(Color.brandDeep)
         Spacer()
-        if isInputFocused { speakerButton }
+        if isCompact { speakerButton }
       }
       if model.showsDownloadPrompt {
         downloadPrompt
@@ -637,7 +632,7 @@ struct TranslatePage: View {
           .font(metrics.cardBodyFont)
           .foregroundStyle(Color.brandDeep.opacity(outputBodyOpacity))
       }
-      if !isInputFocused {
+      if !isCompact {
         Spacer(minLength: metrics.cardSpacing)
         HStack(alignment: .bottom) {
           Text(model.outputHint)
@@ -666,7 +661,7 @@ struct TranslatePage: View {
 
   private var micColor: Color {
     if model.isRecording { return .danger }
-    return isInputFocused ? .brand : .brandDeep
+    return isCompact ? .brand : .brandDeep
   }
 
   /// Filled circle in expanded state, ghost/outline in compact state.
@@ -683,16 +678,16 @@ struct TranslatePage: View {
 
   @ViewBuilder private var speakerGlyph: some View {
     if model.isTranslating {
-      ProgressView().tint(isInputFocused ? Color.brandDeep : .white)
+      ProgressView().tint(isCompact ? Color.brandDeep : .white)
     } else {
       Image(systemName: "speaker.wave.2.fill")
         .font(.system(size: metrics.iconSize, weight: .semibold))
-        .foregroundStyle(isInputFocused ? Color.brandDeep : .white)
+        .foregroundStyle(isCompact ? Color.brandDeep : .white)
     }
   }
 
   @ViewBuilder private var speakerBackground: some View {
-    if isInputFocused {
+    if isCompact {
       Circle().stroke(Color.brandDeep, lineWidth: 1.5)
     } else {
       Circle().fill(Color.brandDeep)
