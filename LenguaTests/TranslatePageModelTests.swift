@@ -947,4 +947,46 @@ extension TranslatePageModelTests {
     expectNoDifference(model.inputText, "")
     expectNoDifference(model.direction, .spanishToEnglish)
   }
+
+  @Test func lateTranscriptAfterClearDoesNotRepopulateInput() async {
+    let clock = TestClock()
+    let translateCalls = LockIsolated(0)
+    let box = LockIsolated<Continuation?>(nil)
+    let (streaming, streamingContinuation) = AsyncStream<Void>.makeStream()
+    let model = withDependencies {
+      $0.continuousClock = clock
+      $0.translator.translate = { text, _ in
+        translateCalls.withValue { $0 += 1 }
+        return "t:\(text)"
+      }
+      $0.speechRecognizer.requestAuthorization = { .authorized }
+      $0.speechRecognizer.stop = {}
+      $0.speechSynthesizer.stop = {}
+      $0.speechRecognizer.start = { _ in
+        AsyncThrowingStream { continuation in
+          box.setValue(continuation)
+          streamingContinuation.yield()
+          streamingContinuation.finish()
+          continuation.onTermination = { _ in continuation.finish() }
+        }
+      }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    model.micButtonTapped()
+    var iterator = streaming.makeAsyncIterator()
+    await iterator.next()  // dictation is live
+    model.clearButtonTapped()  // cancels dictation and empties the fields
+    await model.recognitionTask?.value
+
+    // A transcript buffered before the cancel must not re-populate the cleared input
+    // or restart translation.
+    box.value?.yield(SpeechRecognitionResult(transcript: "late", isFinal: true))
+    box.value?.finish()
+
+    expectNoDifference(model.inputText, "")
+    expectNoDifference(model.outputText, "")
+    expectNoDifference(translateCalls.value, 0)
+  }
 }

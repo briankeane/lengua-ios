@@ -193,6 +193,9 @@ final class TranslatePageModel: ViewModel {
       do {
         let stream = try await speechRecognizer.start(direction.speechRecognitionLocaleIdentifier)
         for try await result in stream {
+          // A buffered transcript can arrive after cancellation (e.g. the learner
+          // tapped Clear or left the page); don't let it repopulate the cleared input.
+          guard !Task.isCancelled else { break }
           inputText = result.transcript  // drives auto-translate via didSet
         }
       } catch is CancellationError {
