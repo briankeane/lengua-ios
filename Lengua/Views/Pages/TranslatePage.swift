@@ -504,7 +504,7 @@ struct TranslatePage: View {
           .padding(metrics.contentPadding)
           .frame(
             maxWidth: .infinity,
-            minHeight: isCompact ? 0 : proxy.size.height,
+            minHeight: proxy.size.height,
             alignment: .top)
       }
     }
@@ -613,7 +613,12 @@ struct TranslatePage: View {
       }
     }
     .padding(metrics.cardPadding)
-    .frame(maxWidth: .infinity, minHeight: metrics.cardMinHeight, alignment: .topLeading)
+    .frame(
+      maxWidth: .infinity,
+      minHeight: metrics.cardMinHeight,
+      maxHeight: .infinity,
+      alignment: .topLeading
+    )
     .background(cardShape(topRadius: metrics.cardOuterRadius, bottomRadius: 4).fill(Color.surface))
   }
 
@@ -645,7 +650,12 @@ struct TranslatePage: View {
       }
     }
     .padding(metrics.cardPadding)
-    .frame(maxWidth: .infinity, minHeight: metrics.cardMinHeight, alignment: .topLeading)
+    .frame(
+      maxWidth: .infinity,
+      minHeight: metrics.cardMinHeight,
+      maxHeight: .infinity,
+      alignment: .topLeading
+    )
     .background(
       cardShape(topRadius: 4, bottomRadius: metrics.cardOuterRadius).fill(Color.brandSoft))
   }
