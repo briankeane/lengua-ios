@@ -591,13 +591,18 @@ struct TranslatePage: View {
           }
         }
       }
-      TextField(model.inputPlaceholder, text: $model.inputText)
+      TextField(model.inputPlaceholder, text: $model.inputText, axis: .vertical)
         .font(metrics.cardBodyFont)
         .foregroundStyle(Color.ink)
-        .lineLimit(1)
         .focused($isInputFocused)
         .submitLabel(.done)
-        .onSubmit { isInputFocused = false }
+        .onChange(of: model.inputText) { _, newValue in
+          // A vertical-axis field turns Return into a newline rather than firing
+          // onSubmit; treat that newline as Done — strip it and drop focus.
+          guard newValue.contains("\n") else { return }
+          model.inputText = newValue.replacingOccurrences(of: "\n", with: "")
+          isInputFocused = false
+        }
       Spacer(minLength: metrics.cardSpacing)
       HStack(alignment: .bottom) {
         Text(isCompact ? model.compactInputHint : model.inputHint)
