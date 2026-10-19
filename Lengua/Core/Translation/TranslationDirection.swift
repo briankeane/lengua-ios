@@ -9,17 +9,24 @@ enum TranslationDirection: String, Sendable, Equatable, CaseIterable, Codable {
   case spanishToEnglish
 
   /// Language being translated FROM (the input text's language).
+  ///
+  /// Spanish is tagged `es-419` (Latin America), not bare `es` — Apple's
+  /// Translation framework canonicalizes a bare `es` to Castilian (`es-ES`) and
+  /// prompts to download the "Spanish (Spain)" model. `es-419` biases toward the
+  /// Latin American model and matches the app's `es-MX` speech locales.
   var source: Locale.Language {
     switch self {
     case .englishToSpanish: Locale.Language(identifier: "en")
-    case .spanishToEnglish: Locale.Language(identifier: "es")
+    case .spanishToEnglish: Locale.Language(identifier: "es-419")
     }
   }
 
   /// Language being translated TO (the output text's language).
+  ///
+  /// See `source` for why Spanish is `es-419` rather than bare `es`.
   var target: Locale.Language {
     switch self {
-    case .englishToSpanish: Locale.Language(identifier: "es")
+    case .englishToSpanish: Locale.Language(identifier: "es-419")
     case .spanishToEnglish: Locale.Language(identifier: "en")
     }
   }
