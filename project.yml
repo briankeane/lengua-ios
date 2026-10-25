@@ -56,6 +56,10 @@ targets:
       Debug: Lengua/Config/Secrets-Local.xcconfig
       Staging: Lengua/Config/Secrets-Staging.xcconfig
       Release: Lengua/Config/Secrets.xcconfig
+    entitlements:
+      path: Lengua/Lengua.entitlements
+      properties:
+        com.apple.developer.applesignin: [Default]
     settings:
       base:
         INFOPLIST_FILE: Lengua/Info.plist

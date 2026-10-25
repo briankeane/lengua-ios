@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Dependencies
 @preconcurrency import GoogleSignIn
 import GoogleSignInSwift
@@ -22,12 +23,10 @@ final class SignInPageModel: ViewModel {
   // MARK: - Properties
   var presentedAlert: LenguaAlert?
   var isSigningIn = false
-  let isAppleSignInEnabled = false
 
   var titleText: String { "Lengua" }
   var subtitleText: String { "Look it up. Keep it. Say it back." }
   var googleSignInButtonTitle: String { "Sign in with Google" }
-  var appleSignInButtonTitle: String { "Sign in with Apple" }
 
   @ObservationIgnored
   var keyWindowProvider: @MainActor () -> UIViewController? = {
@@ -77,10 +76,54 @@ final class SignInPageModel: ViewModel {
     }
   }
 
-  // Apple sign-in is intentionally disabled for now (button rendered, no-op).
-  func appleSignInButtonTapped() {}
+  // Called synchronously by `SignInWithAppleButton` before Apple's sheet is shown.
+  func signInWithAppleButtonTapped(request: ASAuthorizationAppleIDRequest) {
+    request.requestedScopes = [.fullName, .email]
+    isSigningIn = true
+  }
+
+  func signInWithAppleCompleted(result: Result<ASAuthorization, any Error>) async {
+    defer { isSigningIn = false }
+    await analytics.track(.signInStarted(method: .apple))
+
+    switch result {
+    case .success(let authorization):
+      guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+        let identityTokenData = credential.identityToken,
+        let identityToken = String(data: identityTokenData, encoding: .utf8)
+      else {
+        presentedAlert = .signInError
+        await errorReporting.reportMessage(
+          "Apple sign-in missing identityToken",
+          ["auth_method": "apple", "sign_in_step": "identity_token"])
+        return
+      }
+      await exchangeAppleIdentityToken(
+        identityToken, fullName: credential.fullName, appleUserId: credential.user)
+    case .failure(let error):
+      let isUserCancelled = (error as? ASAuthorizationError)?.code == .canceled
+      if !isUserCancelled {
+        await handleSignInAPIFailure(error, authMethod: .apple, step: "apple_authorization")
+      }
+    }
+  }
 
   // MARK: - Internal Helpers
+
+  // Internal so tests can drive the server exchange without fabricating an ASAuthorization.
+  // Apple only returns `fullName` on the first authorization; the server keeps it from then on.
+  func exchangeAppleIdentityToken(
+    _ identityToken: String, fullName: PersonNameComponents?, appleUserId: String
+  ) async {
+    do {
+      let result = try await api.signInViaApple(
+        identityToken, fullName?.givenName, fullName?.familyName)
+      $auth.withLock { $0 = Auth(jwtToken: result.token, currentUser: result.user) }
+      await analytics.track(.signInCompleted(method: .apple, userId: appleUserId))
+    } catch {
+      await handleSignInAPIFailure(error, authMethod: .apple, step: "api_call")
+    }
+  }
 
   // Internal so tests can drive alert/analytics/reporting routing directly.
   func handleSignInAPIFailure(_ error: Error, authMethod: AuthMethod, step: String) async {
@@ -124,7 +167,6 @@ struct SignInPage: View {
         VStack(spacing: 16) {
           WhiteSignInButton(
             iconImageName: "google-icon",
-            systemIcon: nil,
             title: model.googleSignInButtonTitle
           ) {
             Task { await model.signInWithGoogleButtonTapped() }
@@ -132,15 +174,16 @@ struct SignInPage: View {
           .disabled(model.isSigningIn)
           .opacity(model.isSigningIn ? 0.5 : 1)
 
-          WhiteSignInButton(
-            iconImageName: nil,
-            systemIcon: "apple.logo",
-            title: model.appleSignInButtonTitle
-          ) {
-            model.appleSignInButtonTapped()
+          SignInWithAppleButton(.signIn) { request in
+            model.signInWithAppleButtonTapped(request: request)
+          } onCompletion: { result in
+            Task { await model.signInWithAppleCompleted(result: result) }
           }
-          .disabled(!model.isAppleSignInEnabled)
-          .opacity(model.isAppleSignInEnabled ? 1 : 0.5)
+          .signInWithAppleButtonStyle(.white)
+          .frame(height: 56)
+          .clipShape(RoundedRectangle(cornerRadius: 12))
+          .disabled(model.isSigningIn)
+          .opacity(model.isSigningIn ? 0.5 : 1)
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 24)
@@ -151,24 +194,17 @@ struct SignInPage: View {
 }
 
 private struct WhiteSignInButton: View {
-  let iconImageName: String?
-  let systemIcon: String?
+  let iconImageName: String
   let title: String
   let action: () -> Void
 
   var body: some View {
     Button(action: action) {
       HStack(spacing: 12) {
-        if let iconImageName {
-          Image(iconImageName)
-            .resizable()
-            .scaledToFit()
-            .frame(width: 24, height: 24)
-        } else if let systemIcon {
-          Image(systemName: systemIcon)
-            .font(.system(size: 22))
-            .foregroundStyle(.black)
-        }
+        Image(iconImageName)
+          .resizable()
+          .scaledToFit()
+          .frame(width: 24, height: 24)
         Text(title)
           .font(.system(size: 20, weight: .semibold))
           .foregroundStyle(.black)

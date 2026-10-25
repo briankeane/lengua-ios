@@ -13,7 +13,13 @@ struct APIClient: Sendable {
   var health: @Sendable () async throws -> Bool = { true }
 
   /// Exchanges a Google ID token for a Lengua session (JWT + user).
-  var signInViaGoogle: @Sendable (_ idToken: String) async throws -> GoogleSignInResult
+  var signInViaGoogle: @Sendable (_ idToken: String) async throws -> SignInResult
+
+  /// Exchanges an Apple identity token for a Lengua session (JWT + user).
+  /// Apple only shares the user's name on first authorization, so names are optional.
+  var signInViaApple:
+    @Sendable (_ identityToken: String, _ firstName: String?, _ lastName: String?) async throws
+      -> SignInResult
 
   /// Fetches one page of the caller's vocab items (auth required).
   var getVocabItems:
@@ -47,14 +53,14 @@ struct APIClient: Sendable {
     ) async throws -> VocabItem
 }
 
-struct GoogleSignInResult: Equatable, Sendable {
+struct SignInResult: Equatable, Sendable {
   let user: User
   let token: String
 }
 
-/// Decodes the `POST /v1/auth/google` response `{ user, token }`.
+/// Decodes the `POST /v1/auth/google` and `POST /v1/auth/apple` response `{ user, token }`.
 /// Extra server fields (`displayName`, `role`) are intentionally ignored.
-struct GoogleSignInResponse: Decodable {
+struct SignInResponse: Decodable {
   struct APIUser: Decodable {
     let id: String
     let email: String
@@ -65,8 +71,8 @@ struct GoogleSignInResponse: Decodable {
   let user: APIUser
   let token: String
 
-  var result: GoogleSignInResult {
-    GoogleSignInResult(
+  var result: SignInResult {
+    SignInResult(
       user: User(
         id: user.id, email: user.email, firstName: user.firstName,
         lastName: user.lastName, profileImageUrl: user.profileImageUrl),
