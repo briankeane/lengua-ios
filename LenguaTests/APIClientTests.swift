@@ -17,7 +17,7 @@ struct APIClientTests {
     expectNoDifference(result.minimumVersion, "1.2.3")
   }
 
-  @Test func googleSignInResponseDecodesUserAndToken() throws {
+  @Test func signInResponseDecodesUserAndToken() throws {
     let json = Data(
       """
       {
@@ -34,7 +34,7 @@ struct APIClientTests {
       }
       """.utf8)
 
-    let decoded = try JSONDecoder().decode(GoogleSignInResponse.self, from: json)
+    let decoded = try JSONDecoder().decode(SignInResponse.self, from: json)
 
     expectNoDifference(decoded.token, "jwt-123")
     expectNoDifference(decoded.user.id, "u1")

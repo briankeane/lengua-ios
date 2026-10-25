@@ -8,6 +8,43 @@ extension APIClient: DependencyKey {
     let session = Session()
     let baseUrl = Config.shared.baseUrl
 
+    @Sendable func signInPost(
+      authMethod: AuthMethod, path: String, parameters: Parameters
+    ) async throws -> SignInResult {
+      let url = baseUrl.appendingPathComponent(path)
+      let response = await session.request(
+        url,
+        method: .post,
+        parameters: parameters,
+        encoding: JSONEncoding.default
+      ).serializingData().response
+
+      guard let httpResponse = response.response else {
+        throw SignInAPIError(
+          authMethod: authMethod, endpointPath: "/\(path)", statusCode: nil,
+          responseBody: nil, underlyingError: response.error ?? APIError.dataNotValid)
+      }
+
+      let body = response.data.flatMap { String(data: $0, encoding: .utf8) }
+      guard (200..<300).contains(httpResponse.statusCode) else {
+        throw SignInAPIError(
+          authMethod: authMethod, endpointPath: "/\(path)",
+          statusCode: httpResponse.statusCode, responseBody: body,
+          underlyingError: response.error ?? APIError.dataNotValid)
+      }
+
+      guard let data = response.data,
+        let decoded = try? JSONDecoder().decode(SignInResponse.self, from: data)
+      else {
+        throw SignInAPIError(
+          authMethod: authMethod, endpointPath: "/\(path)",
+          statusCode: httpResponse.statusCode, responseBody: body,
+          underlyingError: APIError.dataNotValid)
+      }
+
+      return decoded.result
+    }
+
     return APIClient(
       getAppVersionRequirements: {
         let url = baseUrl.appendingPathComponent("v1/app-version-requirements")
@@ -22,39 +59,15 @@ extension APIClient: DependencyKey {
         return response.response?.statusCode == 200
       },
       signInViaGoogle: { idToken in
-        let path = "v1/auth/google"
-        let url = baseUrl.appendingPathComponent(path)
-        let response = await session.request(
-          url,
-          method: .post,
-          parameters: ["idToken": idToken],
-          encoding: JSONEncoding.default
-        ).serializingData().response
-
-        guard let httpResponse = response.response else {
-          throw SignInAPIError(
-            authMethod: .google, endpointPath: "/\(path)", statusCode: nil,
-            responseBody: nil, underlyingError: response.error ?? APIError.dataNotValid)
-        }
-
-        let body = response.data.flatMap { String(data: $0, encoding: .utf8) }
-        guard (200..<300).contains(httpResponse.statusCode) else {
-          throw SignInAPIError(
-            authMethod: .google, endpointPath: "/\(path)",
-            statusCode: httpResponse.statusCode, responseBody: body,
-            underlyingError: response.error ?? APIError.dataNotValid)
-        }
-
-        guard let data = response.data,
-          let decoded = try? JSONDecoder().decode(GoogleSignInResponse.self, from: data)
-        else {
-          throw SignInAPIError(
-            authMethod: .google, endpointPath: "/\(path)",
-            statusCode: httpResponse.statusCode, responseBody: body,
-            underlyingError: APIError.dataNotValid)
-        }
-
-        return decoded.result
+        try await signInPost(
+          authMethod: .google, path: "v1/auth/google", parameters: ["idToken": idToken])
+      },
+      signInViaApple: { identityToken, firstName, lastName in
+        var parameters: Parameters = ["identityToken": identityToken]
+        if let firstName { parameters["firstName"] = firstName }
+        if let lastName { parameters["lastName"] = lastName }
+        return try await signInPost(
+          authMethod: .apple, path: "v1/auth/apple", parameters: parameters)
       },
       getVocabItems: { targetLanguageCode, limit, cursor in
         @Shared(.auth) var auth
