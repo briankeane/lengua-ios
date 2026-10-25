@@ -1,5 +1,5 @@
-# PLACEHOLDER — fill in when the App Store Connect app exists.
+# Signed under the Playola Radio, Incorporated developer team.
 app_identifier "com.lengua-app.lengua"
-apple_id "PLACEHOLDER_APPLE_ID"      # e.g. "you@example.com"
-itc_team_id "PLACEHOLDER_ITC_TEAM"   # App Store Connect team id
-team_id "PLACEHOLDER_TEAM_ID"        # Developer Portal team id
+apple_id "brian.keane@playola.fm"   # Developer Portal username
+itc_team_id "118419083"             # App Store Connect team id
+team_id "FSRSPV9N9Q"                # Developer Portal team id
