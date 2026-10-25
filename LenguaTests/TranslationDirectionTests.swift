@@ -1,3 +1,4 @@
+import CustomDump
 import Foundation
 import Testing
 
@@ -7,29 +8,29 @@ import Testing
 struct TranslationDirectionTests {
   @Test func englishToSpanishMapsLanguagesAndLabels() {
     let direction = TranslationDirection.englishToSpanish
-    #expect(direction.source == Locale.Language(identifier: "en"))
-    #expect(direction.target == Locale.Language(identifier: "es-419"))
+    expectNoDifference(Locale.Language(identifier: "en"), direction.source)
+    expectNoDifference(Locale.Language(identifier: "es-419"), direction.target)
     #expect(direction.inputLabel == "English")
     #expect(direction.outputLabel == "Spanish")
   }
 
   @Test func spanishToEnglishMapsLanguagesAndLabels() {
     let direction = TranslationDirection.spanishToEnglish
-    #expect(direction.source == Locale.Language(identifier: "es-419"))
-    #expect(direction.target == Locale.Language(identifier: "en"))
+    expectNoDifference(Locale.Language(identifier: "es-419"), direction.source)
+    expectNoDifference(Locale.Language(identifier: "en"), direction.target)
     #expect(direction.inputLabel == "Spanish")
     #expect(direction.outputLabel == "English")
   }
 
   @Test func spanishTranslationLanguageIsLatinAmerican() {
-    #expect(TranslationDirection.englishToSpanish.target.languageCode == "es")
-    #expect(TranslationDirection.englishToSpanish.target.region == "419")
-    #expect(TranslationDirection.spanishToEnglish.source.region == "419")
+    expectNoDifference("es", TranslationDirection.englishToSpanish.target.languageCode)
+    expectNoDifference("419", TranslationDirection.englishToSpanish.target.region)
+    expectNoDifference("419", TranslationDirection.spanishToEnglish.source.region)
   }
 
   @Test func targetLanguageCodeStaysBareISO639() {
-    #expect(TranslationDirection.englishToSpanish.targetLanguageCode == "es")
-    #expect(TranslationDirection.spanishToEnglish.targetLanguageCode == "en")
+    expectNoDifference("es", TranslationDirection.englishToSpanish.targetLanguageCode)
+    expectNoDifference("en", TranslationDirection.spanishToEnglish.targetLanguageCode)
   }
 
   @Test func speechIdentifiersFollowSourceAndTarget() {
