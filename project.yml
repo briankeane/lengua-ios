@@ -64,7 +64,7 @@ targets:
       base:
         INFOPLIST_FILE: Lengua/Info.plist
         GENERATE_INFOPLIST_FILE: NO
-        PRODUCT_BUNDLE_IDENTIFIER: com.lengua-app.lengua
+        PRODUCT_BUNDLE_IDENTIFIER: com.lengua-app.ios
         PRODUCT_NAME: Lengua
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -72,7 +72,7 @@ targets:
         ENABLE_TESTABILITY: YES
       configs:
         Staging:
-          PRODUCT_BUNDLE_IDENTIFIER: com.lengua-app.lengua.staging
+          PRODUCT_BUNDLE_IDENTIFIER: com.lengua-app.ios.staging
     dependencies:
       - package: Dependencies
         product: Dependencies
@@ -114,7 +114,7 @@ targets:
         link: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.lengua-app.lengua.LenguaTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.lengua-app.ios.tests
         GENERATE_INFOPLIST_FILE: YES
 
 schemes:
