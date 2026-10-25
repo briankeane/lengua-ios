@@ -24,6 +24,11 @@ final class SignInPageModel: ViewModel {
   var presentedAlert: LenguaAlert?
   var isSigningIn = false
 
+  // Apple only returns the user's name on the first authorization, so hold onto it until an
+  // exchange succeeds; otherwise a retry after a failed exchange would create a nameless account.
+  @ObservationIgnored
+  private var pendingAppleName: (appleUserId: String, fullName: PersonNameComponents)?
+
   var titleText: String { "Lengua" }
   var subtitleText: String { "Look it up. Keep it. Say it back." }
   var googleSignInButtonTitle: String { "Sign in with Google" }
@@ -76,45 +81,57 @@ final class SignInPageModel: ViewModel {
     }
   }
 
+  // Called synchronously by `SignInWithAppleButton` before Apple's sheet is shown.
   func signInWithAppleButtonTapped(request: ASAuthorizationAppleIDRequest) {
-    request.requestedScopes = [.email, .fullName]
-    Task { await analytics.track(.signInStarted(method: .apple)) }
+    request.requestedScopes = [.fullName, .email]
+    isSigningIn = true
   }
 
   func signInWithAppleCompleted(result: Result<ASAuthorization, any Error>) async {
+    defer { isSigningIn = false }
+    await analytics.track(.signInStarted(method: .apple))
+
     switch result {
     case .success(let authorization):
-      let payload: AppleSignInPayload
-      do {
-        payload = try decodeAppleAuthorization(authorization)
-      } catch {
-        await handleAppleCredentialDecodeFailure(error)
+      guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+        let identityTokenData = credential.identityToken,
+        let identityToken = String(data: identityTokenData, encoding: .utf8)
+      else {
+        presentedAlert = .signInError
+        await errorReporting.reportMessage(
+          "Apple sign-in missing identityToken",
+          ["auth_method": "apple", "sign_in_step": "identity_token"])
         return
       }
-      await completeAppleSignIn(payload)
+      await exchangeAppleIdentityToken(
+        identityToken, fullName: credential.fullName, appleUserId: credential.user)
     case .failure(let error):
-      await handleAppleAuthorizationFailure(error)
-    }
-  }
-
-  func completeAppleSignIn(_ payload: AppleSignInPayload) async {
-    // Only one sign-in at a time across Google and Apple.
-    guard !isSigningIn else { return }
-    isSigningIn = true
-    defer { isSigningIn = false }
-
-    do {
-      let result = try await api.signInViaApple(
-        payload.identityToken, payload.email, payload.authorizationCode,
-        payload.firstName, payload.lastName)
-      $auth.withLock { $0 = Auth(jwtToken: result.token, currentUser: result.user) }
-      await analytics.track(.signInCompleted(method: .apple, userId: payload.appleUserId))
-    } catch {
-      await handleSignInAPIFailure(error, authMethod: .apple, step: "api_call")
+      let isUserCancelled = (error as? ASAuthorizationError)?.code == .canceled
+      if !isUserCancelled {
+        await handleSignInAPIFailure(error, authMethod: .apple, step: "apple_authorization")
+      }
     }
   }
 
   // MARK: - Internal Helpers
+
+  // Internal so tests can drive the server exchange without fabricating an ASAuthorization.
+  func exchangeAppleIdentityToken(
+    _ identityToken: String, fullName: PersonNameComponents?, appleUserId: String
+  ) async {
+    if let fullName, fullName.givenName != nil || fullName.familyName != nil {
+      pendingAppleName = (appleUserId, fullName)
+    }
+    let name = pendingAppleName?.appleUserId == appleUserId ? pendingAppleName?.fullName : nil
+    do {
+      let result = try await api.signInViaApple(identityToken, name?.givenName, name?.familyName)
+      pendingAppleName = nil
+      $auth.withLock { $0 = Auth(jwtToken: result.token, currentUser: result.user) }
+      await analytics.track(.signInCompleted(method: .apple, userId: appleUserId))
+    } catch {
+      await handleSignInAPIFailure(error, authMethod: .apple, step: "api_call")
+    }
+  }
 
   // Internal so tests can drive alert/analytics/reporting routing directly.
   func handleSignInAPIFailure(_ error: Error, authMethod: AuthMethod, step: String) async {
@@ -125,76 +142,6 @@ final class SignInPageModel: ViewModel {
     await errorReporting.reportErrorWithContext(
       error, report.tags, report.contextKey, report.context)
   }
-
-  func handleAppleCredentialDecodeFailure(_ error: any Error) async {
-    presentedAlert = .signInError
-    await errorReporting.reportMessage(
-      "Error decoding sign-in info from Apple",
-      [
-        "auth_method": "apple",
-        "sign_in_step": "credential_decode",
-        "decode_reason": (error as? AppleCredentialDecodeError)?.rawValue ?? "unknown",
-      ])
-  }
-
-  // Thin extraction of the Apple credential. The only piece not unit-tested,
-  // because ASAuthorization / ASAuthorizationAppleIDCredential cannot be
-  // constructed in tests. Throws a specific case so decode failures are
-  // diagnosable in error reports.
-  func decodeAppleAuthorization(_ authorization: ASAuthorization) throws -> AppleSignInPayload {
-    guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-      throw AppleCredentialDecodeError.notAppleIDCredential
-    }
-    guard let identityTokenData = credential.identityToken else {
-      throw AppleCredentialDecodeError.missingIdentityToken
-    }
-    guard let identityToken = String(data: identityTokenData, encoding: .utf8) else {
-      throw AppleCredentialDecodeError.identityTokenNotUTF8
-    }
-    guard let authCodeData = credential.authorizationCode else {
-      throw AppleCredentialDecodeError.missingAuthorizationCode
-    }
-    guard let authorizationCode = String(data: authCodeData, encoding: .utf8) else {
-      throw AppleCredentialDecodeError.authorizationCodeNotUTF8
-    }
-    return AppleSignInPayload(
-      identityToken: identityToken,
-      authorizationCode: authorizationCode,
-      email: credential.email,
-      firstName: credential.fullName?.givenName ?? "",
-      lastName: credential.fullName?.familyName,
-      appleUserId: credential.user)
-  }
-
-  // MARK: - Private Helpers
-
-  private func handleAppleAuthorizationFailure(_ error: any Error) async {
-    // The user tapping "Cancel" on the system sheet is not an error.
-    if let authError = error as? ASAuthorizationError, authError.code == .canceled {
-      return
-    }
-    presentedAlert = .signInError
-    let report = SignInErrorReport(error: error, authMethod: .apple, step: "authorization_failure")
-    await errorReporting.reportErrorWithContext(
-      error, report.tags, report.contextKey, report.context)
-  }
-}
-
-struct AppleSignInPayload: Equatable {
-  let identityToken: String
-  let authorizationCode: String
-  let email: String?
-  let firstName: String
-  let lastName: String?
-  let appleUserId: String
-}
-
-enum AppleCredentialDecodeError: String, Error {
-  case notAppleIDCredential
-  case missingIdentityToken
-  case identityTokenNotUTF8
-  case missingAuthorizationCode
-  case authorizationCodeNotUTF8
 }
 
 struct SignInPage: View {
@@ -228,7 +175,6 @@ struct SignInPage: View {
         VStack(spacing: 16) {
           WhiteSignInButton(
             iconImageName: "google-icon",
-            systemIcon: nil,
             title: model.googleSignInButtonTitle
           ) {
             Task { await model.signInWithGoogleButtonTapped() }
@@ -256,24 +202,17 @@ struct SignInPage: View {
 }
 
 private struct WhiteSignInButton: View {
-  let iconImageName: String?
-  let systemIcon: String?
+  let iconImageName: String
   let title: String
   let action: () -> Void
 
   var body: some View {
     Button(action: action) {
       HStack(spacing: 12) {
-        if let iconImageName {
-          Image(iconImageName)
-            .resizable()
-            .scaledToFit()
-            .frame(width: 24, height: 24)
-        } else if let systemIcon {
-          Image(systemName: systemIcon)
-            .font(.system(size: 22))
-            .foregroundStyle(.black)
-        }
+        Image(iconImageName)
+          .resizable()
+          .scaledToFit()
+          .frame(width: 24, height: 24)
         Text(title)
           .font(.system(size: 20, weight: .semibold))
           .foregroundStyle(.black)

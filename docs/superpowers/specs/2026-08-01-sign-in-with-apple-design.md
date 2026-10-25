@@ -1,8 +1,16 @@
 # Sign in with Apple (iOS client)
 
 **Date:** 2026-08-01
-**Status:** Approved — ready for implementation planning
-**Scope:** iOS client only (this repo). Server endpoint is assumed, added separately.
+**Status:** Superseded — the server shipped a smaller contract than the one
+assumed below, and the client was built against it.
+**Scope:** iOS client only (this repo).
+
+> **Actual contract (server `POST /v1/auth/apple`):** body
+> `{ identityToken, firstName?, lastName? }` → `{ user, token }`, the same response
+> as `/v1/auth/google`. The server verifies the identity token's signature and its
+> audience (`APPLE_CLIENT_ID` = the app's bundle id, `com.lengua-app.ios`). It does
+> not use `authorizationCode` or `email`, and has no nonce/replay check yet. The
+> "Assumed server contract" section below is kept for history only.
 
 ## Goal
 

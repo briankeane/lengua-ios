@@ -32,3 +32,9 @@ extension SharedKey where Self == AppStorageKey<TranslationProviderKind>.Default
     Self[.appStorage("translationProviderKind"), default: .apple]
   }
 }
+
+extension SharedKey where Self == InMemoryKey<VocabItems>.Default {
+  static var vocabItems: Self {
+    Self[.inMemory("vocabItems"), default: VocabItems()]
+  }
+}

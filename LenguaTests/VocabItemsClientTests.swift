@@ -1,0 +1,282 @@
+import ConcurrencyExtras
+import CustomDump
+import Dependencies
+import Foundation
+import IdentifiedCollections
+import Sharing
+import Testing
+
+@testable import Lengua
+
+@MainActor
+@Suite(.serialized, .isolatedSharedState)
+struct VocabItemsClientTests {
+  private nonisolated func item(id: String, familiarity: Int = 0) -> VocabItem {
+    VocabItem(
+      id: id, targetLanguageCode: "es", sourceText: "s", targetText: "t",
+      receptiveFamiliarity: familiarity)
+  }
+
+  @Test func refreshLoadsAllPagesIntoSharedState() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, cursor in
+        cursor == nil
+          ? VocabItemsPage(items: [self.item(id: "1")], nextCursor: "c2")
+          : VocabItemsPage(items: [self.item(id: "2")], nextCursor: nil)
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()
+
+      expectNoDifference(vocabItems.items.map(\.id), ["1", "2"])
+      expectNoDifference(vocabItems.isLoading, false)
+      expectNoDifference(vocabItems.loadFailed, false)
+    }
+  }
+
+  @Test func refreshDedupesDuplicateIdsAcrossPages() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, cursor in
+        cursor == nil
+          ? VocabItemsPage(items: [self.item(id: "dup"), self.item(id: "a")], nextCursor: "c2")
+          : VocabItemsPage(items: [self.item(id: "dup")], nextCursor: nil)  // repeated id
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()  // must not trap on the duplicate "dup" id
+
+      expectNoDifference(vocabItems.items.map(\.id).sorted(), ["a", "dup"])
+      expectNoDifference(vocabItems.loadFailed, false)
+    }
+  }
+
+  @Test func refreshFailureSetsLoadFailed() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in throw APIError.dataNotValid }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()
+
+      expectNoDifference(vocabItems.loadFailed, true)
+      expectNoDifference(vocabItems.isLoading, false)
+      expectNoDifference(vocabItems.items.isEmpty, true)
+    }
+  }
+
+  @Test func refreshCancellationDoesNotSetLoadFailed() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in throw CancellationError() }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()
+
+      expectNoDifference(vocabItems.loadFailed, false)
+      expectNoDifference(vocabItems.isLoading, false)
+    }
+  }
+
+  @Test func refreshDiscardsResultsIfSignedOutMidLoad() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in
+        @Shared(.auth) var auth
+        $auth.withLock { $0 = Auth() }  // sign out during the load
+        return VocabItemsPage(items: [self.item(id: "1")], nextCursor: nil)
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()
+
+      expectNoDifference(vocabItems.items.isEmpty, true)
+      expectNoDifference(vocabItems.isLoading, false)
+    }
+  }
+
+  @Test func refreshDiscardsResultsIfAccountChangedMidLoad() async {
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in
+        @Shared(.auth) var auth
+        $auth.withLock { $0 = Auth(jwtToken: "userB") }  // a different account signs in
+        return VocabItemsPage(items: [self.item(id: "1")], nextCursor: nil)
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "userA")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()
+
+      // userA's items must not land in userB's library.
+      expectNoDifference(vocabItems.items.isEmpty, true)
+      expectNoDifference(vocabItems.isLoading, false)
+    }
+  }
+
+  @Test func refreshIsCoalescedWhileAlreadyLoading() async {
+    let callCount = LockIsolated(0)
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in
+        callCount.withValue { $0 += 1 }
+        return VocabItemsPage(items: [self.item(id: "1")], nextCursor: nil)
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      // pretend a load is already in flight
+      @Shared(.vocabItems) var vocabItems = VocabItems(isLoading: true)
+      @Dependency(\.vocabItemsClient) var client
+
+      await client.refresh()  // should no-op because isLoading == true
+
+      expectNoDifference(callCount.value, 0)
+    }
+  }
+
+  @Test func concurrentRefreshesCoalesceToOneLoad() async {
+    let callCount = LockIsolated(0)
+    let started = AsyncStream.makeStream(of: Void.self)
+    let release = AsyncStream.makeStream(of: Void.self)
+
+    await withDependencies {
+      $0.api.getVocabItems = { _, _, _ in
+        callCount.withValue { $0 += 1 }
+        started.continuation.yield()  // signal this load has begun
+        var iterator = release.stream.makeAsyncIterator()
+        _ = await iterator.next()  // suspend until released, so both refreshes overlap
+        return VocabItemsPage(items: [self.item(id: "1")], nextCursor: nil)
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems()
+      @Dependency(\.vocabItemsClient) var client
+
+      async let first: Void = client.refresh()  // starts a load, then suspends on `release`
+      var startedIterator = started.stream.makeAsyncIterator()
+      _ = await startedIterator.next()  // wait until the first load is genuinely in flight
+
+      await client.refresh()  // second call: isLoading already true -> coalesced no-op
+      expectNoDifference(callCount.value, 1)
+
+      release.continuation.yield()  // let the first load finish
+      await first
+      expectNoDifference(vocabItems.items.map(\.id), ["1"])
+    }
+  }
+
+  @Test func clearResetsSharedState() {
+    withDependencies {
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.vocabItems) var vocabItems = VocabItems(
+        items: [item(id: "1")], isLoading: true, loadFailed: true)
+      @Dependency(\.vocabItemsClient) var client
+
+      client.clear()
+
+      expectNoDifference(vocabItems, VocabItems())
+    }
+  }
+
+  @Test func deleteRemovesItemFromSharedStateOnSuccess() async throws {
+    try await withDependencies {
+      $0.api.deleteVocabItem = { _ in }  // 204 success
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems(
+        items: [item(id: "1"), item(id: "2")])
+      @Dependency(\.vocabItemsClient) var client
+
+      try await client.delete("1")
+
+      expectNoDifference(vocabItems.items.map(\.id), ["2"])
+    }
+  }
+
+  @Test func deleteTreats404AsSuccess() async throws {
+    // The live APIClient maps 404 to a normal return, so from the client's
+    // perspective a 404 is indistinguishable from a 204: the item is removed.
+    try await withDependencies {
+      $0.api.deleteVocabItem = { _ in }  // stands in for 204 or 404
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems(items: [item(id: "gone")])
+      @Dependency(\.vocabItemsClient) var client
+
+      try await client.delete("gone")
+
+      expectNoDifference(vocabItems.items.isEmpty, true)
+    }
+  }
+
+  @Test func deleteThrowsAndKeepsItemOnFailure() async {
+    await withDependencies {
+      $0.api.deleteVocabItem = { _ in throw APIError.dataNotValid }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems(items: [item(id: "1")])
+      @Dependency(\.vocabItemsClient) var client
+
+      await #expect(throws: APIError.self) { try await client.delete("1") }
+
+      expectNoDifference(vocabItems.items.map(\.id), ["1"])
+    }
+  }
+
+  @Test func deleteIsNoOpWhenItemAlreadyAbsent() async throws {
+    try await withDependencies {
+      $0.api.deleteVocabItem = { _ in }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "t")
+      @Shared(.vocabItems) var vocabItems = VocabItems(items: [item(id: "keep")])
+      @Dependency(\.vocabItemsClient) var client
+
+      try await client.delete("not-there")  // must not trap
+
+      expectNoDifference(vocabItems.items.map(\.id), ["keep"])
+    }
+  }
+
+  @Test func deleteDiscardsRemovalIfAccountChangedMidDelete() async throws {
+    try await withDependencies {
+      $0.api.deleteVocabItem = { _ in
+        @Shared(.auth) var auth
+        $auth.withLock { $0 = Auth(jwtToken: "userB") }  // account switches mid-delete
+      }
+      $0.vocabItemsClient = .liveValue
+    } operation: {
+      @Shared(.auth) var auth = Auth(jwtToken: "userA")
+      @Shared(.vocabItems) var vocabItems = VocabItems(items: [item(id: "1")])
+      @Dependency(\.vocabItemsClient) var client
+
+      try await client.delete("1")
+
+      // userA's delete must not mutate userB's shared library.
+      expectNoDifference(vocabItems.items.map(\.id), ["1"])
+    }
+  }
+}

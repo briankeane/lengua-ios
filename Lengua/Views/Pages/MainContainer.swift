@@ -6,7 +6,7 @@ import SwiftUI
 final class MainContainerModel: ViewModel {
   enum ActiveTab: String, Codable, Sendable, CaseIterable {
     case lookUp
-    case deck
+    case library
     case review
     case talk
     case you
@@ -14,8 +14,8 @@ final class MainContainerModel: ViewModel {
 
   var lookUpTabTitle: String { "Look up" }
   var lookUpTabIconName: String { "magnifyingglass" }
-  var deckTabTitle: String { "Deck" }
-  var deckTabIconName: String { "rectangle.stack" }
+  var libraryTabTitle: String { "Library" }
+  var libraryTabIconName: String { "books.vertical" }
   var reviewTabTitle: String { "Review" }
   var reviewTabIconName: String { "checkmark.square" }
   var talkTabTitle: String { "Talk" }
@@ -39,10 +39,10 @@ struct MainContainer: View {
       .tag(MainContainerModel.ActiveTab.lookUp)
 
       NavigationStack {
-        DeckPage(model: DeckPageModel())
+        LibraryPage(model: LibraryPageModel())
       }
-      .tabItem { Label(model.deckTabTitle, systemImage: model.deckTabIconName) }
-      .tag(MainContainerModel.ActiveTab.deck)
+      .tabItem { Label(model.libraryTabTitle, systemImage: model.libraryTabIconName) }
+      .tag(MainContainerModel.ActiveTab.library)
 
       NavigationStack {
         ReviewPage(model: ReviewPageModel())

@@ -67,6 +67,12 @@ extension LenguaAlert {
       message: "We couldn't save that word just now. Check your connection and try again.")
   }
 
+  static var deleteFailed: LenguaAlert {
+    LenguaAlert(
+      title: "Couldn't Delete",
+      message: "We couldn't delete that word just now. Check your connection and try again.")
+  }
+
   static var saveRequiresSignIn: LenguaAlert {
     LenguaAlert(
       title: "Sign In to Save",

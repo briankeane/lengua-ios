@@ -6,7 +6,7 @@ import Testing
 @testable import Lengua
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .isolatedSharedState)
 struct TranslationProviderTests {
   private let english = Locale.Language(identifier: "en")
   private let spanish = Locale.Language(identifier: "es")

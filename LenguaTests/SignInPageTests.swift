@@ -9,8 +9,8 @@ import Testing
 
 @testable import Lengua
 
-@Suite(.serialized)
 @MainActor
+@Suite(.serialized, .isolatedSharedState)
 struct SignInPageTests {
   @Test func displayTextMatchesMockup() {
     @Shared(.auth) var auth = Auth()
@@ -18,6 +18,176 @@ struct SignInPageTests {
     expectNoDifference(model.titleText, "Lengua")
     expectNoDifference(model.subtitleText, "Look it up. Keep it. Say it back.")
     expectNoDifference(model.googleSignInButtonTitle, "Sign in with Google")
+  }
+
+  @Test func signInWithAppleButtonTappedRequestsNameAndEmail() {
+    @Shared(.auth) var auth = Auth()
+    let model = SignInPageModel()
+    let request = ASAuthorizationAppleIDProvider().createRequest()
+
+    model.signInWithAppleButtonTapped(request: request)
+
+    expectNoDifference(Set(request.requestedScopes ?? []), [.fullName, .email])
+  }
+
+  @Test func signInWithAppleButtonTappedMarksSigningIn() {
+    @Shared(.auth) var auth = Auth()
+    let model = SignInPageModel()
+
+    model.signInWithAppleButtonTapped(request: ASAuthorizationAppleIDProvider().createRequest())
+
+    #expect(model.isSigningIn)
+  }
+
+  @Test func signInWithAppleCancelledClearsSigningInSilently() async {
+    @Shared(.auth) var auth = Auth()
+    let reportCount = LockIsolated(0)
+    let model = withDependencies {
+      $0.analytics.track = { _ in }
+      $0.errorReporting.reportErrorWithContext = { _, _, _, _ in reportCount.withValue { $0 += 1 } }
+    } operation: {
+      SignInPageModel()
+    }
+    model.isSigningIn = true
+
+    await model.signInWithAppleCompleted(result: .failure(ASAuthorizationError(.canceled)))
+
+    #expect(!model.isSigningIn)
+    expectNoDifference(model.presentedAlert, nil)
+    expectNoDifference(reportCount.value, 0)
+  }
+
+  @Test func signInWithAppleFailurePresentsAlertAndReportsAppleTags() async {
+    @Shared(.auth) var auth = Auth()
+    let reportedTags = LockIsolated<[String: String]>([:])
+    let model = withDependencies {
+      $0.analytics.track = { _ in }
+      $0.errorReporting.reportErrorWithContext = { _, tags, _, _ in
+        reportedTags.withValue { $0 = tags }
+      }
+    } operation: {
+      SignInPageModel()
+    }
+    model.isSigningIn = true
+
+    await model.signInWithAppleCompleted(result: .failure(ASAuthorizationError(.failed)))
+
+    #expect(!model.isSigningIn)
+    expectNoDifference(model.presentedAlert, .signInError)
+    expectNoDifference(reportedTags.value["auth_method"], "apple")
+  }
+
+  @Test func signInWithAppleCompletedTracksSignInStartedEvent() async {
+    @Shared(.auth) var auth = Auth()
+    let capturedEvents = LockIsolated<[AnalyticsEvent]>([])
+    let model = withDependencies {
+      $0.analytics.track = { event in capturedEvents.withValue { $0.append(event) } }
+    } operation: {
+      SignInPageModel()
+    }
+
+    await model.signInWithAppleCompleted(result: .failure(ASAuthorizationError(.canceled)))
+
+    expectNoDifference(capturedEvents.value, [.signInStarted(method: .apple)])
+  }
+
+  @Test func exchangeAppleIdentityTokenSavesSession() async {
+    @Shared(.auth) var auth = Auth()
+    let user = User(id: "u1", email: "sam@privaterelay.appleid.com", firstName: "Sam")
+    let model = withDependencies {
+      $0.analytics.track = { _ in }
+      $0.api.signInViaApple = { _, _, _ in SignInResult(user: user, token: "jwt-123") }
+    } operation: {
+      SignInPageModel()
+    }
+
+    await model.exchangeAppleIdentityToken("apple-id-token", fullName: nil, appleUserId: "apple-1")
+
+    expectNoDifference(auth, Auth(jwtToken: "jwt-123", currentUser: user))
+  }
+
+  @Test func exchangeAppleIdentityTokenForwardsTokenAndName() async {
+    @Shared(.auth) var auth = Auth()
+    let sent = LockIsolated<[String?]>([])
+    let model = withDependencies {
+      $0.analytics.track = { _ in }
+      $0.api.signInViaApple = { token, firstName, lastName in
+        sent.withValue { $0 = [token, firstName, lastName] }
+        return SignInResult(user: User(id: "u1", email: "sam@example.com"), token: "jwt")
+      }
+    } operation: {
+      SignInPageModel()
+    }
+    var fullName = PersonNameComponents()
+    fullName.givenName = "Sam"
+    fullName.familyName = "Lee"
+
+    await model.exchangeAppleIdentityToken(
+      "apple-id-token", fullName: fullName, appleUserId: "apple-1")
+
+    expectNoDifference(sent.value, ["apple-id-token", "Sam", "Lee"])
+  }
+
+  @Test func exchangeAppleIdentityTokenRetryReusesNameFromFailedFirstAttempt() async {
+    @Shared(.auth) var auth = Auth()
+    let attempts = LockIsolated<[[String?]]>([])
+    let model = withDependencies {
+      $0.analytics.track = { _ in }
+      $0.errorReporting.reportErrorWithContext = { _, _, _, _ in }
+      $0.api.signInViaApple = { _, firstName, lastName in
+        let isFirstAttempt = attempts.withValue {
+          $0.append([firstName, lastName])
+          return $0.count == 1
+        }
+        if isFirstAttempt { throw APIError.dataNotValid }
+        return SignInResult(user: User(id: "u1", email: "sam@example.com"), token: "jwt")
+      }
+    } operation: {
+      SignInPageModel()
+    }
+    var fullName = PersonNameComponents()
+    fullName.givenName = "Sam"
+    fullName.familyName = "Lee"
+
+    await model.exchangeAppleIdentityToken("token-1", fullName: fullName, appleUserId: "apple-1")
+    await model.exchangeAppleIdentityToken(
+      "token-2", fullName: PersonNameComponents(), appleUserId: "apple-1")
+
+    expectNoDifference(attempts.value, [["Sam", "Lee"], ["Sam", "Lee"]])
+  }
+
+  @Test func exchangeAppleIdentityTokenTracksSignInCompleted() async {
+    @Shared(.auth) var auth = Auth()
+    let capturedEvents = LockIsolated<[AnalyticsEvent]>([])
+    let model = withDependencies {
+      $0.analytics.track = { event in capturedEvents.withValue { $0.append(event) } }
+      $0.api.signInViaApple = { _, _, _ in
+        SignInResult(user: User(id: "u1", email: "sam@example.com"), token: "jwt")
+      }
+    } operation: {
+      SignInPageModel()
+    }
+
+    await model.exchangeAppleIdentityToken("apple-id-token", fullName: nil, appleUserId: "apple-1")
+
+    expectNoDifference(
+      capturedEvents.value, [.signInCompleted(method: .apple, userId: "apple-1")])
+  }
+
+  @Test func exchangeAppleIdentityTokenFailurePresentsAlertAndKeepsSignedOut() async {
+    @Shared(.auth) var auth = Auth()
+    let model = withDependencies {
+      $0.analytics.track = { _ in }
+      $0.errorReporting.reportErrorWithContext = { _, _, _, _ in }
+      $0.api.signInViaApple = { _, _, _ in throw APIError.dataNotValid }
+    } operation: {
+      SignInPageModel()
+    }
+
+    await model.exchangeAppleIdentityToken("apple-id-token", fullName: nil, appleUserId: "apple-1")
+
+    expectNoDifference(model.presentedAlert, .signInError)
+    expectNoDifference(auth, Auth())
   }
 
   @Test func signInWithGoogleTracksSignInStartedEvent() async {
@@ -138,189 +308,5 @@ struct SignInPageTests {
         if case .signInFailed(let method, _) = $0 { return method == .google }
         return false
       })
-  }
-}
-
-extension SignInPageTests {
-  @Test func signInWithAppleSetsScopesAndTracksStarted() async {
-    await withMainSerialExecutor {
-      @Shared(.auth) var auth = Auth()
-      let capturedEvents = LockIsolated<[AnalyticsEvent]>([])
-      let model = withDependencies {
-        $0.analytics.track = { event in capturedEvents.withValue { $0.append(event) } }
-      } operation: {
-        SignInPageModel()
-      }
-
-      let request = ASAuthorizationAppleIDProvider().createRequest()
-      model.signInWithAppleButtonTapped(request: request)
-
-      expectNoDifference(request.requestedScopes, [.email, .fullName])
-      await Task.yield()
-      #expect(
-        capturedEvents.value.contains {
-          if case .signInStarted(let method) = $0 { return method == .apple }
-          return false
-        })
-    }
-  }
-
-  @Test func completeAppleSignInStoresAuthAndTracksCompletedOnSuccess() async {
-    await withDependencies {
-      $0.defaultFileStorage = .inMemory
-    } operation: {
-      @Shared(.auth) var auth = Auth()
-      let capturedEvents = LockIsolated<[AnalyticsEvent]>([])
-      let user = User(
-        id: "apple-user-1", email: "sam@example.com", firstName: "Sam",
-        lastName: "Lee", profileImageUrl: nil)
-
-      let model = withDependencies {
-        $0.api.signInViaApple = { _, _, _, _, _ in
-          AppleSignInResult(user: user, token: "jwt-abc")
-        }
-        $0.analytics.track = { event in capturedEvents.withValue { $0.append(event) } }
-      } operation: {
-        SignInPageModel()
-      }
-
-      let payload = AppleSignInPayload(
-        identityToken: "id-token", authorizationCode: "auth-code",
-        email: "sam@example.com", firstName: "Sam", lastName: "Lee",
-        appleUserId: "apple-user-1")
-
-      await model.completeAppleSignIn(payload)
-
-      expectNoDifference(model.auth, Auth(jwtToken: "jwt-abc", currentUser: user))
-      #expect(
-        capturedEvents.value.contains {
-          if case .signInCompleted(let method, let userId) = $0 {
-            return method == .apple && userId == "apple-user-1"
-          }
-          return false
-        })
-    }
-  }
-
-  @Test func completeAppleSignInShowsAlertAndTracksFailureOnAPIError() async {
-    await withDependencies {
-      $0.defaultFileStorage = .inMemory
-    } operation: {
-      @Shared(.auth) var auth = Auth()
-      let capturedEvents = LockIsolated<[AnalyticsEvent]>([])
-
-      let model = withDependencies {
-        $0.api.signInViaApple = { _, _, _, _, _ in
-          throw NSError(domain: "com.lengua.api", code: 500)
-        }
-        $0.analytics.track = { event in capturedEvents.withValue { $0.append(event) } }
-        $0.errorReporting.reportErrorWithContext = { _, _, _, _ in }
-      } operation: {
-        SignInPageModel()
-      }
-
-      let payload = AppleSignInPayload(
-        identityToken: "id-token", authorizationCode: "auth-code",
-        email: nil, firstName: "", lastName: nil, appleUserId: "apple-user-2")
-
-      await model.completeAppleSignIn(payload)
-
-      expectNoDifference(model.presentedAlert, .signInError)
-      expectNoDifference(model.auth.isLoggedIn, false)
-      #expect(
-        capturedEvents.value.contains {
-          if case .signInFailed(let method, _) = $0 { return method == .apple }
-          return false
-        })
-    }
-  }
-
-  @Test func completeAppleSignInIgnoredWhileAlreadySigningIn() async {
-    await withDependencies {
-      $0.defaultFileStorage = .inMemory
-    } operation: {
-      @Shared(.auth) var auth = Auth()
-      let apiCalled = LockIsolated(false)
-
-      let model = withDependencies {
-        $0.api.signInViaApple = { _, _, _, _, _ in
-          apiCalled.setValue(true)
-          return AppleSignInResult(
-            user: User(
-              id: "x", email: "x@x.com", firstName: nil, lastName: nil, profileImageUrl: nil),
-            token: "t")
-        }
-      } operation: {
-        SignInPageModel()
-      }
-      model.isSigningIn = true
-
-      let payload = AppleSignInPayload(
-        identityToken: "id-token", authorizationCode: "auth-code",
-        email: nil, firstName: "", lastName: nil, appleUserId: "apple-user-3")
-
-      await model.completeAppleSignIn(payload)
-
-      #expect(apiCalled.value == false)
-      expectNoDifference(model.auth.isLoggedIn, false)
-    }
-  }
-
-  @Test func signInWithAppleCompletedCancelledFailureIsSilent() async {
-    @Shared(.auth) var auth = Auth()
-    let reportCount = LockIsolated(0)
-
-    let model = withDependencies {
-      $0.errorReporting.reportErrorWithContext = { _, _, _, _ in
-        reportCount.withValue { $0 += 1 }
-      }
-    } operation: {
-      SignInPageModel()
-    }
-
-    let cancelled = ASAuthorizationError(.canceled)
-    await model.signInWithAppleCompleted(result: .failure(cancelled))
-
-    expectNoDifference(model.presentedAlert, nil)
-    expectNoDifference(reportCount.value, 0)
-  }
-
-  @Test func signInWithAppleCompletedNonCancelFailureShowsAlertAndReports() async {
-    @Shared(.auth) var auth = Auth()
-    let reportCount = LockIsolated(0)
-
-    let model = withDependencies {
-      $0.errorReporting.reportErrorWithContext = { _, _, _, _ in
-        reportCount.withValue { $0 += 1 }
-      }
-    } operation: {
-      SignInPageModel()
-    }
-
-    let failed = ASAuthorizationError(.failed)
-    await model.signInWithAppleCompleted(result: .failure(failed))
-
-    expectNoDifference(model.presentedAlert, .signInError)
-    expectNoDifference(reportCount.value, 1)
-  }
-
-  @Test func handleAppleCredentialDecodeFailureShowsAlertAndReports() async {
-    @Shared(.auth) var auth = Auth()
-    let reportedTags = LockIsolated<[String: String]>([:])
-
-    let model = withDependencies {
-      $0.errorReporting.reportMessage = { _, tags in
-        reportedTags.withValue { $0 = tags }
-      }
-    } operation: {
-      SignInPageModel()
-    }
-
-    await model.handleAppleCredentialDecodeFailure(AppleCredentialDecodeError.missingIdentityToken)
-
-    expectNoDifference(model.presentedAlert, .signInError)
-    expectNoDifference(reportedTags.value["auth_method"], "apple")
-    expectNoDifference(reportedTags.value["sign_in_step"], "credential_decode")
-    expectNoDifference(reportedTags.value["decode_reason"], "missingIdentityToken")
   }
 }

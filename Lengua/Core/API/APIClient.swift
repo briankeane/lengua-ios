@@ -13,31 +13,54 @@ struct APIClient: Sendable {
   var health: @Sendable () async throws -> Bool = { true }
 
   /// Exchanges a Google ID token for a Lengua session (JWT + user).
-  var signInViaGoogle: @Sendable (_ idToken: String) async throws -> GoogleSignInResult
+  var signInViaGoogle: @Sendable (_ idToken: String) async throws -> SignInResult
 
-  /// Exchanges an Apple identity token + auth code for a Lengua session (JWT + user).
-  /// Apple returns name/email only on the first authorization; the client forwards
-  /// whatever it receives. `email` and `lastName` are omitted from the body when nil.
+  /// Exchanges an Apple identity token for a Lengua session (JWT + user).
+  /// Apple only shares the user's name on first authorization, so names are optional.
   var signInViaApple:
+    @Sendable (_ identityToken: String, _ firstName: String?, _ lastName: String?) async throws
+      -> SignInResult
+
+  /// Fetches one page of the caller's vocab items (auth required).
+  var getVocabItems:
     @Sendable (
-      _ identityToken: String, _ email: String?, _ authorizationCode: String,
-      _ firstName: String, _ lastName: String?
-    ) async throws -> AppleSignInResult
+      _ targetLanguageCode: String?,
+      _ limit: Int?,
+      _ cursor: String?
+    ) async throws -> VocabItemsPage
 
   /// Saves a translated word/phrase for the signed-in user (auth required).
   /// The server treats 201 (newly saved) and 200 (already saved) identically,
   /// so both resolve to the returned item without error.
   var saveVocabItem: @Sendable (_ request: SaveVocabItemRequest) async throws -> VocabItem
+
+  /// Permanently deletes one of the signed-in user's vocab items (auth required).
+  /// The server returns 204 on delete and 404 when the item is already gone or
+  /// owned by someone else; both mean "no longer exists", so both resolve without
+  /// error.
+  var deleteVocabItem: @Sendable (_ id: String) async throws -> Void
+
+  /// Fetches the caller's due review cards (auth required). `direction == nil` ⇒ "any".
+  var getReviewQueue:
+    @Sendable (
+      _ direction: ReviewDirection?, _ limit: Int?, _ targetLanguageCode: String?
+    ) async throws -> ReviewQueue
+
+  /// Records the outcome of reviewing one track of one card and returns the updated item.
+  var submitReview:
+    @Sendable (
+      _ vocabItemId: String, _ direction: ReviewDirection, _ outcome: ReviewOutcome
+    ) async throws -> VocabItem
 }
 
-struct GoogleSignInResult: Equatable, Sendable {
+struct SignInResult: Equatable, Sendable {
   let user: User
   let token: String
 }
 
-/// Decodes the `POST /v1/auth/google` response `{ user, token }`.
+/// Decodes the `POST /v1/auth/google` and `POST /v1/auth/apple` response `{ user, token }`.
 /// Extra server fields (`displayName`, `role`) are intentionally ignored.
-struct GoogleSignInResponse: Decodable {
+struct SignInResponse: Decodable {
   struct APIUser: Decodable {
     let id: String
     let email: String
@@ -48,8 +71,8 @@ struct GoogleSignInResponse: Decodable {
   let user: APIUser
   let token: String
 
-  var result: GoogleSignInResult {
-    GoogleSignInResult(
+  var result: SignInResult {
+    SignInResult(
       user: User(
         id: user.id, email: user.email, firstName: user.firstName,
         lastName: user.lastName, profileImageUrl: user.profileImageUrl),
@@ -57,31 +80,25 @@ struct GoogleSignInResponse: Decodable {
   }
 }
 
-struct AppleSignInResult: Equatable, Sendable {
-  let user: User
-  let token: String
+struct VocabItemsPage: Equatable, Sendable {
+  var items: [VocabItem]
+  var nextCursor: String?
 }
 
-/// Decodes the `POST /v1/auth/apple` response `{ user, token }`.
-/// Extra server fields (`displayName`, `role`) are intentionally ignored.
-struct AppleSignInResponse: Decodable {
-  struct APIUser: Decodable {
-    let id: String
-    let email: String
-    let firstName: String?
-    let lastName: String?
-    let profileImageUrl: String?
+/// Decodes the `GET /v1/vocab-items` response envelope.
+struct VocabItemsResponse: Decodable {
+  struct Pagination: Decodable {
+    let limit: Int
+    let nextCursor: String?
   }
-  let user: APIUser
-  let token: String
+  let vocabItems: [VocabItem]
+  let pagination: Pagination
+}
 
-  var result: AppleSignInResult {
-    AppleSignInResult(
-      user: User(
-        id: user.id, email: user.email, firstName: user.firstName,
-        lastName: user.lastName, profileImageUrl: user.profileImageUrl),
-      token: token)
-  }
+/// Decodes the `GET /v1/vocab-items/review` response envelope.
+struct ReviewQueueResponse: Decodable {
+  let reviewCards: [ReviewCard]
+  let dueCounts: DueCounts
 }
 
 enum APIError: Error, LocalizedError {
