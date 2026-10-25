@@ -128,6 +128,34 @@ struct SignInPageTests {
     expectNoDifference(sent.value, ["apple-id-token", "Sam", "Lee"])
   }
 
+  @Test func exchangeAppleIdentityTokenRetryReusesNameFromFailedFirstAttempt() async {
+    @Shared(.auth) var auth = Auth()
+    let attempts = LockIsolated<[[String?]]>([])
+    let model = withDependencies {
+      $0.analytics.track = { _ in }
+      $0.errorReporting.reportErrorWithContext = { _, _, _, _ in }
+      $0.api.signInViaApple = { _, firstName, lastName in
+        let isFirstAttempt = attempts.withValue {
+          $0.append([firstName, lastName])
+          return $0.count == 1
+        }
+        if isFirstAttempt { throw APIError.dataNotValid }
+        return SignInResult(user: User(id: "u1", email: "sam@example.com"), token: "jwt")
+      }
+    } operation: {
+      SignInPageModel()
+    }
+    var fullName = PersonNameComponents()
+    fullName.givenName = "Sam"
+    fullName.familyName = "Lee"
+
+    await model.exchangeAppleIdentityToken("token-1", fullName: fullName, appleUserId: "apple-1")
+    await model.exchangeAppleIdentityToken(
+      "token-2", fullName: PersonNameComponents(), appleUserId: "apple-1")
+
+    expectNoDifference(attempts.value, [["Sam", "Lee"], ["Sam", "Lee"]])
+  }
+
   @Test func exchangeAppleIdentityTokenTracksSignInCompleted() async {
     @Shared(.auth) var auth = Auth()
     let capturedEvents = LockIsolated<[AnalyticsEvent]>([])

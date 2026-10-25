@@ -24,6 +24,11 @@ final class SignInPageModel: ViewModel {
   var presentedAlert: LenguaAlert?
   var isSigningIn = false
 
+  // Apple only returns the user's name on the first authorization, so hold onto it until an
+  // exchange succeeds; otherwise a retry after a failed exchange would create a nameless account.
+  @ObservationIgnored
+  private var pendingAppleName: (appleUserId: String, fullName: PersonNameComponents)?
+
   var titleText: String { "Lengua" }
   var subtitleText: String { "Look it up. Keep it. Say it back." }
   var googleSignInButtonTitle: String { "Sign in with Google" }
@@ -111,13 +116,16 @@ final class SignInPageModel: ViewModel {
   // MARK: - Internal Helpers
 
   // Internal so tests can drive the server exchange without fabricating an ASAuthorization.
-  // Apple only returns `fullName` on the first authorization; the server keeps it from then on.
   func exchangeAppleIdentityToken(
     _ identityToken: String, fullName: PersonNameComponents?, appleUserId: String
   ) async {
+    if let fullName, fullName.givenName != nil || fullName.familyName != nil {
+      pendingAppleName = (appleUserId, fullName)
+    }
+    let name = pendingAppleName?.appleUserId == appleUserId ? pendingAppleName?.fullName : nil
     do {
-      let result = try await api.signInViaApple(
-        identityToken, fullName?.givenName, fullName?.familyName)
+      let result = try await api.signInViaApple(identityToken, name?.givenName, name?.familyName)
+      pendingAppleName = nil
       $auth.withLock { $0 = Auth(jwtToken: result.token, currentUser: result.user) }
       await analytics.track(.signInCompleted(method: .apple, userId: appleUserId))
     } catch {
