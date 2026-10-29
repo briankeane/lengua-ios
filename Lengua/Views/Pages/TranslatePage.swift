@@ -432,6 +432,8 @@ extension TranslatePageModel {
   var isCopyEnabled: Bool {
     !isTranslating && !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
+  var copyButtonAccessibilityLabel: String { "Copy translation" }
+  var copyButtonAccessibilityValue: String { isOutputCopied ? "Copied" : "" }
 
   /// Whether to show the download affordance in place of the (blank) output —
   /// true only when the current direction's model needs downloading.
@@ -799,5 +801,7 @@ extension TranslatePage {
     }
     .disabled(!model.isCopyEnabled)
     .opacity(model.isCopyEnabled ? 1 : 0.42)
+    .accessibilityLabel(model.copyButtonAccessibilityLabel)
+    .accessibilityValue(model.copyButtonAccessibilityValue)
   }
 }

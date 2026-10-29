@@ -23,7 +23,7 @@ extension TranslatePageModelTests {
 
     model.copyButtonTapped()
     expectNoDifference(copied.value, "Hola")
-    #expect(model.isOutputCopied)
+    expectNoDifference(model.isOutputCopied, true)
   }
 
   @Test func copyDoesNothingWhenOutputEmpty() {
@@ -34,10 +34,10 @@ extension TranslatePageModelTests {
       TranslatePageModel()
     }
 
-    #expect(model.isCopyEnabled == false)
+    expectNoDifference(model.isCopyEnabled, false)
     model.copyButtonTapped()
-    #expect(copied.value == false)
-    #expect(model.isOutputCopied == false)
+    expectNoDifference(copied.value, false)
+    expectNoDifference(model.isOutputCopied, false)
   }
 
   @Test func copyIsDisabledWhileTranslating() async {
@@ -53,10 +53,10 @@ extension TranslatePageModelTests {
     model.inputText = "Hello"
     await clock.advance(by: .milliseconds(500))
     await model.translationTask?.value
-    #expect(model.isCopyEnabled)
+    expectNoDifference(model.isCopyEnabled, true)
 
     model.inputText = "Hello there"
-    #expect(model.isCopyEnabled == false)
+    expectNoDifference(model.isCopyEnabled, false)
   }
 
   @Test func editingInputResetsCopiedState() async {
@@ -73,9 +73,25 @@ extension TranslatePageModelTests {
     await clock.advance(by: .milliseconds(500))
     await model.translationTask?.value
     model.copyButtonTapped()
-    #expect(model.isOutputCopied)
+    expectNoDifference(model.isOutputCopied, true)
 
     model.inputText = "Hello there"
-    #expect(model.isOutputCopied == false)
+    expectNoDifference(model.isOutputCopied, false)
+  }
+
+  @Test func copyAccessibilityReflectsCopyState() {
+    let model = withDependencies {
+      $0.pasteboard.copy = { _ in }
+    } operation: {
+      TranslatePageModel()
+    }
+
+    expectNoDifference(model.copyButtonAccessibilityLabel, "Copy translation")
+    expectNoDifference(model.copyButtonAccessibilityValue, "")
+
+    model.outputText = "Hola"
+    model.copyButtonTapped()
+
+    expectNoDifference(model.copyButtonAccessibilityValue, "Copied")
   }
 }
