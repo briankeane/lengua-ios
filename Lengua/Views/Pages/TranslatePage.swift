@@ -12,6 +12,7 @@ final class TranslatePageModel: ViewModel {
   @ObservationIgnored @Dependency(\.continuousClock) var clock
   @ObservationIgnored @Dependency(\.speechSynthesizer) var speechSynthesizer
   @ObservationIgnored @Dependency(\.speechRecognizer) var speechRecognizer
+  @ObservationIgnored @Dependency(\.pasteboard) var pasteboard
 
   // MARK: - Shared State
   @ObservationIgnored @Shared(.vocabItems) var vocabItems
@@ -28,6 +29,7 @@ final class TranslatePageModel: ViewModel {
       // Editing the source makes the visible pair unsaved, even if the eventual
       // translation happens to produce the same output text.
       saveState = .idle
+      isOutputCopied = false
       scheduleTranslation()
     }
   }
@@ -36,12 +38,14 @@ final class TranslatePageModel: ViewModel {
       guard outputText != oldValue else { return }
       // Any new translation content is unsaved: clear a prior "Saved" state.
       saveState = .idle
+      isOutputCopied = false
     }
   }
   var isTranslating = false
   var isRecording = false
   var recordingElapsed = 0
   var saveState: SaveState = .idle
+  var isOutputCopied = false
   var presentedAlert: LenguaAlert?
 
   enum SaveState: Equatable { case idle, saving, saved }
@@ -160,6 +164,12 @@ final class TranslatePageModel: ViewModel {
     }
   }
 
+  func copyButtonTapped() {
+    guard isCopyEnabled else { return }
+    pasteboard.copy(outputText)
+    isOutputCopied = true
+  }
+
   func micButtonTapped() {
     if isRecording {
       recognitionTask?.cancel()
@@ -210,10 +220,6 @@ final class TranslatePageModel: ViewModel {
   }
 
   // MARK: - Private Helpers
-  private var formattedRecordingTime: String {
-    String(format: "%d:%02d", recordingElapsed / 60, recordingElapsed % 60)
-  }
-
   private func startRecordingTimer() {
     recordingTimerTask?.cancel()
     recordingElapsed = 0
@@ -423,6 +429,12 @@ extension TranslatePageModel {
       && !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
+  var isCopyEnabled: Bool {
+    !isTranslating && !outputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+  var copyButtonAccessibilityLabel: String { "Copy translation" }
+  var copyButtonAccessibilityValue: String { isOutputCopied ? "Copied" : "" }
+
   /// Whether to show the download affordance in place of the (blank) output —
   /// true only when the current direction's model needs downloading.
   var showsDownloadPrompt: Bool { downloadRequiredDirection == direction }
@@ -430,6 +442,10 @@ extension TranslatePageModel {
     "\(direction.outputLabel) translation needs to be downloaded."
   }
   var downloadButtonTitle: String { "Download" }
+
+  private var formattedRecordingTime: String {
+    String(format: "%d:%02d", recordingElapsed / 60, recordingElapsed % 60)
+  }
 }
 
 /// The two visual states of the Look Up screen. `expanded` is the default
@@ -629,7 +645,12 @@ struct TranslatePage: View {
           .font(.inter(12, weight: .bold))
           .foregroundStyle(Color.brandDeep)
         Spacer()
-        if isCompact { speakerButton }
+        if isCompact {
+          HStack(spacing: 8) {
+            copyButton
+            speakerButton
+          }
+        }
       }
       if model.showsDownloadPrompt {
         downloadPrompt
@@ -645,7 +666,10 @@ struct TranslatePage: View {
             .font(.inter(14))
             .foregroundStyle(Color.brandDeep)
           Spacer()
-          speakerButton
+          HStack(spacing: 12) {
+            copyButton
+            speakerButton
+          }
         }
       }
     }
@@ -673,36 +697,6 @@ struct TranslatePage: View {
   private var micColor: Color {
     if model.isRecording { return .danger }
     return isCompact ? .brand : .brandDeep
-  }
-
-  /// Filled circle in expanded state, ghost/outline in compact state.
-  private var speakerButton: some View {
-    Button {
-      Task { await model.speakerButtonTapped() }
-    } label: {
-      speakerGlyph
-        .frame(width: metrics.actionSize, height: metrics.actionSize)
-        .background(speakerBackground)
-    }
-    .disabled(model.isTranslating)
-  }
-
-  @ViewBuilder private var speakerGlyph: some View {
-    if model.isTranslating {
-      ProgressView().tint(isCompact ? Color.brandDeep : .white)
-    } else {
-      Image(systemName: "speaker.wave.2.fill")
-        .font(.system(size: metrics.iconSize, weight: .semibold))
-        .foregroundStyle(isCompact ? Color.brandDeep : .white)
-    }
-  }
-
-  @ViewBuilder private var speakerBackground: some View {
-    if isCompact {
-      Circle().stroke(Color.brandDeep, lineWidth: 1.5)
-    } else {
-      Circle().fill(Color.brandDeep)
-    }
   }
 
   private var swapButton: some View {
@@ -761,5 +755,53 @@ struct TranslatePage: View {
       bottomLeadingRadius: bottomRadius,
       bottomTrailingRadius: bottomRadius,
       topTrailingRadius: topRadius)
+  }
+}
+
+// MARK: - Output Actions
+extension TranslatePage {
+  /// Filled circle in expanded state, ghost/outline in compact state.
+  private var speakerButton: some View {
+    Button {
+      Task { await model.speakerButtonTapped() }
+    } label: {
+      speakerGlyph
+        .frame(width: metrics.actionSize, height: metrics.actionSize)
+        .background(speakerBackground)
+    }
+    .disabled(model.isTranslating)
+  }
+
+  @ViewBuilder private var speakerGlyph: some View {
+    if model.isTranslating {
+      ProgressView().tint(isCompact ? Color.brandDeep : .white)
+    } else {
+      Image(systemName: "speaker.wave.2.fill")
+        .font(.system(size: metrics.iconSize, weight: .semibold))
+        .foregroundStyle(isCompact ? Color.brandDeep : .white)
+    }
+  }
+
+  @ViewBuilder private var speakerBackground: some View {
+    if isCompact {
+      Circle().stroke(Color.brandDeep, lineWidth: 1.5)
+    } else {
+      Circle().fill(Color.brandDeep)
+    }
+  }
+
+  private var copyButton: some View {
+    Button(action: model.copyButtonTapped) {
+      Image(systemName: model.isOutputCopied ? "checkmark" : "doc.on.doc")
+        .font(.system(size: metrics.iconSize, weight: .semibold))
+        .foregroundStyle(Color.brandDeep)
+        .frame(width: metrics.actionSize, height: metrics.actionSize)
+        .background(Circle().stroke(Color.brandDeep, lineWidth: 1.5))
+        .contentTransition(.symbolEffect(.replace))
+    }
+    .disabled(!model.isCopyEnabled)
+    .opacity(model.isCopyEnabled ? 1 : 0.42)
+    .accessibilityLabel(model.copyButtonAccessibilityLabel)
+    .accessibilityValue(model.copyButtonAccessibilityValue)
   }
 }
