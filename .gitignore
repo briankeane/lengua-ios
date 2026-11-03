@@ -17,6 +17,7 @@ xcuserdata/
 vendor/bundle/
 fastlane/report.xml
 fastlane/test_output/
+fastlane/README.md
 
 # Conductor scratch
 .context/

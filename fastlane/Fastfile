@@ -1,31 +1,114 @@
 default_platform(:ios)
 
-REQUIRED_ENV = %w[MATCH_PASSWORD APP_STORE_CONNECT_API_KEY_ID].freeze
+APP_IDENTIFIER = "com.lengua-app.ios".freeze
 
-def ensure_release_secrets!
-  missing = REQUIRED_ENV.reject { |k| ENV[k] && !ENV[k].empty? }
-  unless missing.empty?
-    UI.user_error!("Release secrets not configured: #{missing.join(', ')}. " \
-                   "This is a scaffold — fill in Appfile/Matchfile and CI secrets first.")
+# CURRENT_PROJECT_VERSION committed in project.yml. Used only as a lower bound
+# for the derived build number — never as the shipped value on its own.
+def committed_build_number
+  project_yml = File.expand_path("../project.yml", __dir__)
+  File.read(project_yml)[/CURRENT_PROJECT_VERSION: "(\d+)"/, 1].to_i
+end
+
+# Highest build number on App Store Connect across ALL marketing versions and
+# processing states. Not latest_testflight_build_number: that returns the most
+# recently *uploaded* build, which is not necessarily the numeric max.
+# Requires Spaceship auth (asc_api_key sets the token via set_spaceship_token).
+def highest_testflight_build_number(app_identifier:)
+  app = Spaceship::ConnectAPI::App.find(app_identifier)
+  UI.user_error!("App #{app_identifier} not found on App Store Connect — check credentials/identifier.") unless app
+  Spaceship::ConnectAPI::Build.all(app_id: app.id).map { |b| b.version.to_i }.max || 0
+end
+
+# Derive the TestFlight build number from App Store Connect so uploads never
+# collide, regardless of what is checked in.
+def next_testflight_build_number(app_identifier:)
+  latest = highest_testflight_build_number(app_identifier: app_identifier)
+
+  # Zero means the query failed or we are pointed at the wrong app (the app
+  # already has upload history). Fail loudly rather than ship build 1.
+  if latest <= 0
+    UI.user_error!(
+      "No builds found for #{app_identifier} on App Store Connect (query failed or wrong app) — refusing to upload."
+    )
   end
+
+  # The committed number is a lower bound covering eventual-consistency gaps
+  # (a just-uploaded build not yet listed).
+  floor = committed_build_number
+  nxt = [latest, floor].max + 1
+  UI.message("Build number for #{app_identifier}: #{nxt} (ASC max #{latest}, committed floor #{floor})")
+  nxt
 end
 
 platform :ios do
-  desc "Build and upload production to TestFlight"
-  lane :release_production do
-    ensure_release_secrets!
+  before_all do
     setup_ci if ENV["CI"]
-    match(type: "appstore", readonly: true)
-    build_app(scheme: "Lengua", xcargs: "-skipMacroValidation")
-    upload_to_testflight(skip_waiting_for_build_processing: true)
   end
 
-  desc "Build and upload staging to TestFlight"
-  lane :release_staging do
-    ensure_release_secrets!
-    setup_ci if ENV["CI"]
-    match(type: "appstore", readonly: true)
-    build_app(scheme: "Lengua", configuration: "Staging", xcargs: "-skipMacroValidation")
-    upload_to_testflight(skip_waiting_for_build_processing: true)
+  # Resolve the App Store Connect API key, accepting EITHER the raw .p8 PEM or a
+  # base64-encoded .p8 in APP_STORE_CONNECT_API_KEY_CONTENT (base64 is preferred
+  # for CI, where env vars can mangle the PEM's newlines). Falls back to the .p8
+  # file at APP_STORE_CONNECT_API_KEY_PATH for local runs.
+  private_lane :asc_api_key do
+    key = (ENV["APP_STORE_CONNECT_API_KEY_CONTENT"] || "").strip
+    key = File.read(File.expand_path(ENV["APP_STORE_CONNECT_API_KEY_PATH"])).strip if key.empty? && ENV["APP_STORE_CONNECT_API_KEY_PATH"]
+    UI.user_error!("Set APP_STORE_CONNECT_API_KEY_CONTENT (CI; raw .p8 or base64 of it) or APP_STORE_CONNECT_API_KEY_PATH (local)") if key.empty?
+    app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+      key_content: key,
+      # A raw PEM always contains "-----BEGIN"; base64 never can (no dashes).
+      is_key_content_base64: !key.include?("-----BEGIN"),
+      # Authorize the direct Spaceship::ConnectAPI build-number query too.
+      set_spaceship_token: true
+    )
+  end
+
+  desc "Release PRODUCTION build to TestFlight"
+  lane :release_production do
+    ensure_git_status_clean
+    ensure_git_branch(branch: "main") unless ENV["CI"]
+
+    match(type: "appstore", app_identifier: APP_IDENTIFIER, readonly: true)
+
+    run_tests
+
+    api_key = asc_api_key
+    build_number = next_testflight_build_number(app_identifier: APP_IDENTIFIER)
+
+    build_app(
+      project: "Lengua.xcodeproj",
+      scheme: "Lengua",
+      export_method: "app-store",
+      output_directory: "./build",
+      xcargs: "-skipMacroValidation CURRENT_PROJECT_VERSION=#{build_number}",
+      export_options: {
+        method: "app-store",
+        provisioningProfiles: {
+          APP_IDENTIFIER => "match AppStore #{APP_IDENTIFIER}"
+        }
+      }
+    )
+
+    # Pass api_key explicitly: pilot otherwise reads APP_STORE_CONNECT_API_KEY_PATH
+    # as the path to a JSON key file and fails on the .p8.
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      skip_waiting_for_build_processing: true
+    )
+
+    puts "✅ Production build #{build_number} uploaded to TestFlight!"
+  end
+
+  private_lane :run_tests do
+    scan(
+      project: "Lengua.xcodeproj",
+      scheme: "Lengua",
+      xcargs: "-skipMacroValidation",
+      xcodebuild_formatter: "xcbeautify",
+      output_directory: "./fastlane/test_output/xctest",
+      result_bundle: true
+    )
   end
 end

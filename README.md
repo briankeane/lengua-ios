@@ -88,6 +88,30 @@ fastlane/           # Release automation (see Placeholders below)
 .github/workflows/  # CI, release, release-PR
 ```
 
+## Releasing to TestFlight
+
+1. Merge the version bump (`MARKETING_VERSION` in `project.yml`) to `main`.
+   The build number is derived at release time from App Store Connect
+   (highest existing build + 1), so it never needs a manual bump.
+2. Export an App Store Connect API key (App Manager role or higher):
+
+   ```bash
+   export APP_STORE_CONNECT_API_KEY_ID=...
+   export APP_STORE_CONNECT_API_ISSUER_ID=...
+   export APP_STORE_CONNECT_API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_XXXX.p8
+   ```
+
+   On CI, set `APP_STORE_CONNECT_API_KEY_CONTENT` (base64 of the `.p8`)
+   instead of the path.
+3. Run `make release-production`. It checks out and pulls `main`, then the
+   `release_production` lane verifies a clean tree, installs signing from
+   match, runs the tests, builds, and uploads to TestFlight.
+
+Signing uses [match](https://docs.fastlane.tools/actions/match/) with the
+Playola team's shared certificates repo
+(`playola-radio/fastlane-match-certs-and-profiles`); the repo passphrase
+(`MATCH_PASSWORD`) is read from the login keychain after the first run.
+
 ## Placeholders to fill in
 
 This skeleton ships with intentional placeholders so it builds and tests
@@ -97,9 +121,9 @@ green out of the box. Before shipping to real users, fill in:
   default, which disables Sentry entirely.
 - **Apple Developer team + App Store Connect app** — `fastlane/Appfile`
   (`apple_id`, `itc_team_id`, `team_id`).
-- **`match` certificates repo** — `fastlane/Matchfile` (`git_url`).
-- **GitHub Actions secrets** — `MATCH_PASSWORD` and
-  `APP_STORE_CONNECT_API_KEY_ID`, referenced by `.github/workflows/release.yml`.
+- **GitHub Actions release** — `.github/workflows/release.yml` is not wired
+  up yet; the runner needs `MATCH_PASSWORD`, SSH access to the match repo,
+  and the App Store Connect API key secrets.
 - **CI Xcode version** — `.github/workflows/ci.yml` and `release.yml` both
   pin `xcode-select` to `/Applications/Xcode_16.4.app`; this is illustrative
   and must be updated to match an Xcode version actually installed on the

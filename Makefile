@@ -7,7 +7,7 @@ SIMULATOR_UDID := $(shell xcrun simctl list devices available | awk '/-- iOS 18\
 DESTINATION := platform=iOS Simulator,id=$(SIMULATOR_UDID)
 XCFLAGS := -skipMacroValidation CODE_SIGNING_ALLOWED=NO
 
-.PHONY: generate build test lint format format-check setup-conductor release
+.PHONY: generate build test lint format format-check setup-conductor release-production
 
 generate:
 	xcodegen generate
@@ -36,5 +36,9 @@ setup-conductor:
 			|| cp $(ORIGINAL_REPO)/Lengua/Config/$$f.xcconfig Lengua/Config/$$f.xcconfig; \
 	done
 
-release:
+release-production:
+	git checkout main
+	git pull --ff-only origin main
+	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" || (echo "Local main does not match origin/main; refusing to release unpushed code." && exit 1)
+	$(MAKE) generate
 	bundle exec fastlane release_production
