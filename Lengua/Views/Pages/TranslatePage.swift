@@ -607,19 +607,26 @@ struct TranslatePage: View {
           }
         }
       }
-      TextField(model.inputPlaceholder, text: $model.inputText, axis: .vertical)
-        .font(metrics.cardBodyFont)
-        .foregroundStyle(Color.ink)
-        .focused($isInputFocused)
-        .submitLabel(.done)
-        .onChange(of: model.inputText) { _, newValue in
-          // A vertical-axis field turns Return into a newline rather than firing
-          // onSubmit; treat that newline as Done — strip it and drop focus.
-          guard newValue.contains("\n") else { return }
-          model.inputText = newValue.replacingOccurrences(of: "\n", with: "")
-          isInputFocused = false
-        }
-      Spacer(minLength: metrics.cardSpacing)
+      ScrollView {
+        TextField(model.inputPlaceholder, text: $model.inputText, axis: .vertical)
+          .font(metrics.cardBodyFont)
+          .foregroundStyle(Color.ink)
+          .focused($isInputFocused)
+          .submitLabel(.done)
+          .onChange(of: model.inputText) { _, newValue in
+            // A vertical-axis field turns Return into a newline rather than firing
+            // onSubmit; treat that newline as Done — strip it and drop focus.
+            guard newValue.contains("\n") else { return }
+            model.inputText = newValue.replacingOccurrences(of: "\n", with: "")
+            isInputFocused = false
+          }
+      }
+      .scrollBounceBehavior(.basedOnSize)
+      // Without a zero ideal height the page-level ScrollView sizes each card to
+      // its full text, so the card grows instead of scrolling. Same for output.
+      .frame(idealHeight: 0)
+      // Keep the end of the text — where typing and dictation append — in view.
+      .defaultScrollAnchor(.bottom, for: .sizeChanges)
       HStack(alignment: .bottom) {
         Text(isCompact ? model.compactInputHint : model.inputHint)
           .font(.inter(metrics.hintFontSize, weight: model.isRecording ? .bold : .regular))
@@ -654,13 +661,18 @@ struct TranslatePage: View {
       }
       if model.showsDownloadPrompt {
         downloadPrompt
+          .frame(maxHeight: .infinity, alignment: .top)
       } else {
-        Text(model.outputBodyText)
-          .font(metrics.cardBodyFont)
-          .foregroundStyle(Color.brandDeep.opacity(outputBodyOpacity))
+        ScrollView {
+          Text(model.outputBodyText)
+            .font(metrics.cardBodyFont)
+            .foregroundStyle(Color.brandDeep.opacity(outputBodyOpacity))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(idealHeight: 0)
       }
       if !isCompact {
-        Spacer(minLength: metrics.cardSpacing)
         HStack(alignment: .bottom) {
           Text(model.outputHint)
             .font(.inter(14))
