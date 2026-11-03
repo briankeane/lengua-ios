@@ -88,6 +88,24 @@ fastlane/           # Release automation (see Placeholders below)
 .github/workflows/  # CI, release, release-PR
 ```
 
+## Releasing to TestFlight
+
+1. Bump `MARKETING_VERSION` and/or `CURRENT_PROJECT_VERSION` in `project.yml`
+   (every upload needs a new build number).
+2. Export an App Store Connect API key (App Manager role or higher):
+
+   ```bash
+   export APP_STORE_CONNECT_API_KEY_ID=...
+   export APP_STORE_CONNECT_API_ISSUER_ID=...
+   export APP_STORE_CONNECT_API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_XXXX.p8
+   ```
+
+3. Run `make release` (production) or
+   `make generate && bundle exec fastlane release_staging` (staging).
+
+Signing is automatic: the API key lets Xcode create and renew the
+distribution certificate and provisioning profiles itself.
+
 ## Placeholders to fill in
 
 This skeleton ships with intentional placeholders so it builds and tests
@@ -97,9 +115,9 @@ green out of the box. Before shipping to real users, fill in:
   default, which disables Sentry entirely.
 - **Apple Developer team + App Store Connect app** — `fastlane/Appfile`
   (`apple_id`, `itc_team_id`, `team_id`).
-- **`match` certificates repo** — `fastlane/Matchfile` (`git_url`).
-- **GitHub Actions secrets** — `MATCH_PASSWORD` and
-  `APP_STORE_CONNECT_API_KEY_ID`, referenced by `.github/workflows/release.yml`.
+- **GitHub Actions release** — `.github/workflows/release.yml` is not wired
+  up yet; it needs the App Store Connect API key (below) available on the
+  runner.
 - **CI Xcode version** — `.github/workflows/ci.yml` and `release.yml` both
   pin `xcode-select` to `/Applications/Xcode_16.4.app`; this is illustrative
   and must be updated to match an Xcode version actually installed on the

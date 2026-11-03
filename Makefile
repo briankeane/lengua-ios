@@ -36,5 +36,5 @@ setup-conductor:
 			|| cp $(ORIGINAL_REPO)/Lengua/Config/$$f.xcconfig Lengua/Config/$$f.xcconfig; \
 	done
 
-release:
+release: generate
 	bundle exec fastlane release_production

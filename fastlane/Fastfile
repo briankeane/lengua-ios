@@ -1,31 +1,57 @@
 default_platform(:ios)
 
-REQUIRED_ENV = %w[MATCH_PASSWORD APP_STORE_CONNECT_API_KEY_ID].freeze
+REQUIRED_ENV = %w[
+  APP_STORE_CONNECT_API_KEY_ID
+  APP_STORE_CONNECT_API_ISSUER_ID
+  APP_STORE_CONNECT_API_KEY_PATH
+].freeze
 
 def ensure_release_secrets!
   missing = REQUIRED_ENV.reject { |k| ENV[k] && !ENV[k].empty? }
   unless missing.empty?
     UI.user_error!("Release secrets not configured: #{missing.join(', ')}. " \
-                   "This is a scaffold — fill in Appfile/Matchfile and CI secrets first.")
+                   "Set them to an App Store Connect API key (App Manager role or higher).")
   end
+end
+
+# Automatic signing via the API key: Xcode creates/renews the distribution
+# certificate and profiles itself, so there is no match repo to maintain.
+def signing_xcargs
+  key_path = File.expand_path(ENV["APP_STORE_CONNECT_API_KEY_PATH"])
+  "-allowProvisioningUpdates " \
+    "-authenticationKeyPath #{key_path.shellescape} " \
+    "-authenticationKeyID #{ENV['APP_STORE_CONNECT_API_KEY_ID']} " \
+    "-authenticationKeyIssuerID #{ENV['APP_STORE_CONNECT_API_ISSUER_ID']}"
 end
 
 platform :ios do
   desc "Build and upload production to TestFlight"
   lane :release_production do
-    ensure_release_secrets!
-    setup_ci if ENV["CI"]
-    match(type: "appstore", readonly: true)
-    build_app(scheme: "Lengua", xcargs: "-skipMacroValidation")
-    upload_to_testflight(skip_waiting_for_build_processing: true)
+    upload_build(configuration: "Release")
   end
 
   desc "Build and upload staging to TestFlight"
   lane :release_staging do
+    upload_build(configuration: "Staging")
+  end
+
+  private_lane :upload_build do |options|
     ensure_release_secrets!
-    setup_ci if ENV["CI"]
-    match(type: "appstore", readonly: true)
-    build_app(scheme: "Lengua", configuration: "Staging", xcargs: "-skipMacroValidation")
-    upload_to_testflight(skip_waiting_for_build_processing: true)
+    app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+      key_filepath: File.expand_path(ENV["APP_STORE_CONNECT_API_KEY_PATH"])
+    )
+    build_app(
+      scheme: "Lengua",
+      configuration: options[:configuration],
+      export_method: "app-store",
+      xcargs: "-skipMacroValidation #{signing_xcargs}"
+    )
+    upload_to_testflight(
+      # Pass the key explicitly: pilot otherwise reads APP_STORE_CONNECT_API_KEY_PATH as a JSON key file.
+      api_key: lane_context[SharedValues::APP_STORE_CONNECT_API_KEY],
+      skip_waiting_for_build_processing: true
+    )
   end
 end
