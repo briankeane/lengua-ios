@@ -18,8 +18,6 @@ vendor/bundle/
 fastlane/report.xml
 fastlane/test_output/
 fastlane/README.md
-*.ipa
-*.dSYM.zip
 
 # Conductor scratch
 .context/

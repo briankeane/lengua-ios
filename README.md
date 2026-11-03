@@ -90,8 +90,9 @@ fastlane/           # Release automation (see Placeholders below)
 
 ## Releasing to TestFlight
 
-1. Bump `MARKETING_VERSION` and/or `CURRENT_PROJECT_VERSION` in `project.yml`
-   (every upload needs a new build number).
+1. Merge the version bump (`MARKETING_VERSION` in `project.yml`) to `main`.
+   The build number is derived at release time from App Store Connect
+   (highest existing build + 1), so it never needs a manual bump.
 2. Export an App Store Connect API key (App Manager role or higher):
 
    ```bash
@@ -100,11 +101,16 @@ fastlane/           # Release automation (see Placeholders below)
    export APP_STORE_CONNECT_API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_XXXX.p8
    ```
 
-3. Run `make release` (production) or
-   `make generate && bundle exec fastlane release_staging` (staging).
+   On CI, set `APP_STORE_CONNECT_API_KEY_CONTENT` (base64 of the `.p8`)
+   instead of the path.
+3. Run `make release-production`. It checks out and pulls `main`, then the
+   `release_production` lane verifies a clean tree, installs signing from
+   match, runs the tests, builds, and uploads to TestFlight.
 
-Signing is automatic: the API key lets Xcode create and renew the
-distribution certificate and provisioning profiles itself.
+Signing uses [match](https://docs.fastlane.tools/actions/match/) with the
+Playola team's shared certificates repo
+(`playola-radio/fastlane-match-certs-and-profiles`); the repo passphrase
+(`MATCH_PASSWORD`) is read from the login keychain after the first run.
 
 ## Placeholders to fill in
 
@@ -116,8 +122,8 @@ green out of the box. Before shipping to real users, fill in:
 - **Apple Developer team + App Store Connect app** — `fastlane/Appfile`
   (`apple_id`, `itc_team_id`, `team_id`).
 - **GitHub Actions release** — `.github/workflows/release.yml` is not wired
-  up yet; it needs the App Store Connect API key (below) available on the
-  runner.
+  up yet; the runner needs `MATCH_PASSWORD`, SSH access to the match repo,
+  and the App Store Connect API key secrets.
 - **CI Xcode version** — `.github/workflows/ci.yml` and `release.yml` both
   pin `xcode-select` to `/Applications/Xcode_16.4.app`; this is illustrative
   and must be updated to match an Xcode version actually installed on the

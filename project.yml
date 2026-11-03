@@ -73,6 +73,10 @@ targets:
       configs:
         Staging:
           PRODUCT_BUNDLE_IDENTIFIER: com.lengua-app.ios.staging
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: match AppStore com.lengua-app.ios
     dependencies:
       - package: Dependencies
         product: Dependencies

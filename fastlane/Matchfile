@@ -1,0 +1,4 @@
+git_url("git@github.com:playola-radio/fastlane-match-certs-and-profiles.git")
+storage_mode("git")
+type("appstore")
+app_identifier("com.lengua-app.ios")
