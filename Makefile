@@ -37,8 +37,8 @@ setup-conductor:
 	done
 
 release-production:
-	git fetch origin main
 	git checkout main
-	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" || (echo "Local main does not match origin/main; refusing to release unpushed or stale code." && exit 1)
+	git pull --ff-only origin main
+	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" || (echo "Local main does not match origin/main; refusing to release unpushed code." && exit 1)
 	$(MAKE) generate
 	bundle exec fastlane release_production
