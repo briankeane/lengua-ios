@@ -7,14 +7,13 @@ on:
     types: [completed]
     branches: [main]
 
-# One upload at a time so two merges can't claim the same build number.
-concurrency:
-  group: testflight-release
-  cancel-in-progress: false
-
 jobs:
   release:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    # One upload at a time so two merges can't claim the same build number.
+    concurrency:
+      group: testflight-release
+      cancel-in-progress: false
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
