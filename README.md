@@ -96,8 +96,8 @@ the merge commit, `.github/workflows/release.yml` runs the
 uploads. The build number is derived at release time from App Store Connect
 (highest existing build + 1), so it never needs a manual bump; only bump
 `MARKETING_VERSION` in `project.yml` when starting a new version. Releases
-run one at a time, and the workflow can also be started by hand from the
-Actions tab.
+run one at a time; re-run a failed release from its run page in the Actions
+tab.
 
 The workflow reads these repository secrets: `APP_STORE_CONNECT_API_KEY_ID`,
 `APP_STORE_CONNECT_API_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_CONTENT`

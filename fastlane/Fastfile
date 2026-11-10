@@ -93,10 +93,12 @@ platform :ios do
 
     # Pass api_key explicitly: pilot otherwise reads APP_STORE_CONNECT_API_KEY_PATH
     # as the path to a JSON key file and fails on the .p8.
+    # On CI, wait for processing so the next queued release sees this build
+    # number on App Store Connect before picking its own.
     upload_to_testflight(
       api_key: api_key,
       app_identifier: APP_IDENTIFIER,
-      skip_waiting_for_build_processing: true
+      skip_waiting_for_build_processing: !ENV["CI"]
     )
 
     puts "✅ Production build #{build_number} uploaded to TestFlight!"
