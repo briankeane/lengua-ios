@@ -71,7 +71,8 @@ platform :ios do
 
     match(type: "appstore", app_identifier: APP_IDENTIFIER, readonly: true)
 
-    run_tests
+    # On CI the Release workflow only runs after CI's tests passed on this commit.
+    run_tests unless ENV["CI"]
 
     api_key = asc_api_key
     build_number = next_testflight_build_number(app_identifier: APP_IDENTIFIER)

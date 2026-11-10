@@ -85,15 +85,28 @@ Lengua/
     └── Reusable Components/    # ViewModel base, LenguaAlert, etc.
 LenguaTests/        # App-hosted test target
 fastlane/           # Release automation (see Placeholders below)
-.github/workflows/  # CI, release, release-PR
+.github/workflows/  # CI, release (TestFlight on merge to main)
 ```
 
 ## Releasing to TestFlight
 
-1. Merge the version bump (`MARKETING_VERSION` in `project.yml`) to `main`.
-   The build number is derived at release time from App Store Connect
-   (highest existing build + 1), so it never needs a manual bump.
-2. Export an App Store Connect API key (App Manager role or higher):
+Every merge to `main` ships to TestFlight automatically: once CI passes on
+the merge commit, `.github/workflows/release.yml` runs the
+`release_production` lane, which installs signing from match, builds, and
+uploads. The build number is derived at release time from App Store Connect
+(highest existing build + 1), so it never needs a manual bump; only bump
+`MARKETING_VERSION` in `project.yml` when starting a new version. Releases
+run one at a time, and the workflow can also be started by hand from the
+Actions tab.
+
+The workflow reads these repository secrets: `APP_STORE_CONNECT_API_KEY_ID`,
+`APP_STORE_CONNECT_API_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_CONTENT`
+(base64 of the `.p8`), `MATCH_PASSWORD`, and `MATCH_GIT_PRIVATE_KEY` (a
+read-only deploy key on the match repo).
+
+To release from your machine instead:
+
+1. Export an App Store Connect API key (App Manager role or higher):
 
    ```bash
    export APP_STORE_CONNECT_API_KEY_ID=...
@@ -101,16 +114,15 @@ fastlane/           # Release automation (see Placeholders below)
    export APP_STORE_CONNECT_API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_XXXX.p8
    ```
 
-   On CI, set `APP_STORE_CONNECT_API_KEY_CONTENT` (base64 of the `.p8`)
-   instead of the path.
-3. Run `make release-production`. It checks out and pulls `main`, then the
+2. Run `make release-production`. It checks out and pulls `main`, then the
    `release_production` lane verifies a clean tree, installs signing from
    match, runs the tests, builds, and uploads to TestFlight.
 
 Signing uses [match](https://docs.fastlane.tools/actions/match/) with the
 Playola team's shared certificates repo
-(`playola-radio/fastlane-match-certs-and-profiles`); the repo passphrase
-(`MATCH_PASSWORD`) is read from the login keychain after the first run.
+(`playola-radio/fastlane-match-certs-and-profiles`); locally the repo
+passphrase (`MATCH_PASSWORD`) is read from the login keychain after the
+first run.
 
 ## Placeholders to fill in
 
@@ -121,13 +133,11 @@ green out of the box. Before shipping to real users, fill in:
   default, which disables Sentry entirely.
 - **Apple Developer team + App Store Connect app** — `fastlane/Appfile`
   (`apple_id`, `itc_team_id`, `team_id`).
-- **GitHub Actions release** — `.github/workflows/release.yml` is not wired
-  up yet; the runner needs `MATCH_PASSWORD`, SSH access to the match repo,
-  and the App Store Connect API key secrets.
-- **CI Xcode version** — `.github/workflows/ci.yml` and `release.yml` both
-  pin `xcode-select` to `/Applications/Xcode_16.4.app`; this is illustrative
-  and must be updated to match an Xcode version actually installed on the
-  chosen GitHub Actions runner image (it must include the iOS 18 SDK).
+- **CI Xcode version** — `.github/workflows/ci.yml` pins `xcode-select` to
+  `/Applications/Xcode_16.4.app`; this is illustrative and must be updated to
+  match an Xcode version actually installed on the chosen GitHub Actions
+  runner image (it must include the iOS 18 SDK). `release.yml` uses Xcode
+  26.6 on `macos-26`, since TestFlight requires the iOS 26 SDK.
 - **Production `AppIcon` artwork** — `Lengua/Assets.xcassets/AppIcon.appiconset`
   currently has no images.
 - **Google / Apple sign-in client IDs** — not yet wired up; add when the
