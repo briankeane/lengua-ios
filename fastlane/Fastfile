@@ -71,7 +71,8 @@ platform :ios do
 
     match(type: "appstore", app_identifier: APP_IDENTIFIER, readonly: true)
 
-    run_tests
+    # On CI the Release workflow only runs after CI's tests passed on this commit.
+    run_tests unless ENV["CI"]
 
     api_key = asc_api_key
     build_number = next_testflight_build_number(app_identifier: APP_IDENTIFIER)
@@ -92,10 +93,12 @@ platform :ios do
 
     # Pass api_key explicitly: pilot otherwise reads APP_STORE_CONNECT_API_KEY_PATH
     # as the path to a JSON key file and fails on the .p8.
+    # On CI, wait for processing so the next queued release sees this build
+    # number on App Store Connect before picking its own.
     upload_to_testflight(
       api_key: api_key,
       app_identifier: APP_IDENTIFIER,
-      skip_waiting_for_build_processing: true
+      skip_waiting_for_build_processing: !ENV["CI"]
     )
 
     puts "✅ Production build #{build_number} uploaded to TestFlight!"

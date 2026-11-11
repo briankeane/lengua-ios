@@ -15,6 +15,7 @@ xcuserdata/
 
 # Ruby / fastlane
 vendor/bundle/
+.bundle/
 fastlane/report.xml
 fastlane/test_output/
 fastlane/README.md
